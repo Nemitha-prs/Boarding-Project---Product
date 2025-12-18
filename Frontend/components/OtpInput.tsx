@@ -52,7 +52,7 @@ export default function OtpInput({
     if (otp.every((d) => d === "")) {
       setTimeout(() => inputRefs.current[0]?.focus(), 100);
     }
-  }, []);
+  }, [otp]);
 
   return (
     <div className="space-y-4">

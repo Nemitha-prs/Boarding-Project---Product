@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Image from "next/image";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import Link from "next/link";
@@ -318,7 +319,7 @@ export default function EditOwnerListingPage() {
                   if (src) {
                     return (
                       <div key={slot} className="group relative overflow-hidden rounded-2xl border border-slate-200 bg-slate-50">
-                        <img src={src} alt={`Image ${slot + 1}`} className="h-28 w-full object-cover sm:h-32" />
+                        <Image src={src} alt={`Image ${slot + 1}`} width={400} height={128} className="h-28 w-full object-cover sm:h-32" />
                         <div className="absolute inset-0 hidden items-end justify-between bg-black/0 p-2 transition group-hover:flex group-hover:bg-black/10">
                           <label className="rounded-full bg-black/60 px-2 py-1 text-[10px] text-white shadow cursor-pointer" title="Edit">
                             Edit

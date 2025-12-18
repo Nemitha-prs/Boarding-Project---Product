@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { ChevronLeft, ChevronRight, X } from "lucide-react";
 
 interface GalleryProps {
@@ -19,9 +19,13 @@ export default function Gallery({ images, title, className }: GalleryProps) {
     setOpen(true);
   };
 
-  const close = () => setOpen(false);
-  const prev = () => setIndex((i) => (i - 1 + images.length) % images.length);
-  const next = () => setIndex((i) => (i + 1) % images.length);
+  const close = useCallback(() => setOpen(false), []);
+  const prev = useCallback(() => {
+    setIndex((i) => (i - 1 + images.length) % images.length);
+  }, [images.length]);
+  const next = useCallback(() => {
+    setIndex((i) => (i + 1) % images.length);
+  }, [images.length]);
 
   useEffect(() => {
     if (!open) return;
@@ -32,7 +36,7 @@ export default function Gallery({ images, title, className }: GalleryProps) {
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [open]);
+  }, [open, prev, next, close]);
 
   return (
     <>

@@ -772,7 +772,7 @@ export default function BoardingsPage() {
       return 0;
     });
     return copy;
-  }, [filteredListings, bookmarkSet]);
+  }, [filteredListings, bookmarkSet, bookmarkIds.length]);
 
   return (
     <>
