@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
@@ -9,6 +9,7 @@ import { fetchWithAuth, isAuthenticated } from "@/lib/auth";
 import { getCurrentUserRole } from "@/lib/jwt";
 import dynamic from "next/dynamic";
 import { readImageFile, handleBackendImageError, getErrorMessage, type ImageUploadError } from "@/utils/imageUpload";
+import { ChevronDown } from "lucide-react";
 
 const BoardingLocationMap = dynamic(() => import("@/components/BoardingLocationMap"), {
   ssr: false,
@@ -73,25 +74,62 @@ const DISTRICTS = [
 ];
 
 const COLOMBO_AREAS = [
-  "Fort", // 01
-  "Slave Island", // 02
-  "Kollupitiya", // 03
-  "Bambalapitiya", // 04
-  "Havelock Town", // 05
-  "Wellawatte", // 06
-  "Cinnamon Gardens", // 07
-  "Borella", // 08
-  "Dematagoda", // 09
-  "Maradana", // 10
-  "Pettah", // 11
-  "Hulftsdorp", // 12
-  "Kotahena", // 13
-  "Grandpass", // 14
-  "Mutwal", // 15
+  // Central Areas (Colombo 1-15)
+  "Fort", // Colombo 01
+  "Pettah",
+  "Slave Island", // Colombo 02
+  "Kompanna Veediya",
+  "Kollupitiya", // Colombo 03
+  "Cinnamon Gardens", // Colombo 07
+  "Bambalapitiya", // Colombo 04
+  "Wellawatte", // Colombo 06
+  "Thimbirigasyaya",
+  "Havelock Town", // Colombo 05
+  "Kirulapone",
+  "Narahenpita",
+  "Borella", // Colombo 08
+  "Maradana", // Colombo 10
+  "Hulftsdorp", // Colombo 12
+  // Northern & Port-side Areas
+  "Kotahena", // Colombo 13
+  "Grandpass", // Colombo 14
+  "Maligawatte",
+  "Mutwal", // Colombo 15
+  "Mattakkuliya",
+  "Modara",
+  "Dematagoda", // Colombo 09
+  "Kolonnawa",
+  "Angoda",
+  "Wellampitiya",
+  // Eastern / Administrative Belt
+  "Rajagiriya",
+  "Battaramulla",
+  "Ethul Kotte",
+  "Sri Jayawardenepura Kotte",
+  "Nawala",
+  "Koswatta",
+  // Southern Belt
   "Dehiwala",
+  "Kalubowila",
   "Mount Lavinia",
+  "Rathmalana",
+  "Moratuwa",
+  // South-East / University & Residential Areas
   "Nugegoda",
+  "Kohuwala",
+  "Udahamulla",
   "Maharagama",
+  "Piliyandala",
+  "Kottawa",
+  // Outer Colombo District
+  "Athurugiriya",
+  "Homagama",
+  "Godagama",
+  "Meegoda",
+  // Northern Suburbs
+  "Peliyagoda",
+  "Kelaniya",
+  "Wattala",
 ];
 
 const FACILITIES = [
@@ -103,6 +141,98 @@ const FACILITIES = [
   "Kitchen equipment",
   "Refrigerator",
 ];
+
+// Custom scrollable dropdown component
+function ScrollableDropdown({
+  value,
+  onChange,
+  onBlur,
+  options,
+  placeholder,
+  label,
+  required = false,
+  error,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  onBlur: () => void;
+  options: string[];
+  placeholder: string;
+  label: string;
+  required?: boolean;
+  error?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement | null>(null);
+
+  const selected = options.find((option) => option === value) ?? null;
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setOpen(false);
+        onBlur();
+      }
+    }
+
+    if (open) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [open, onBlur]);
+
+  return (
+    <div className="flex flex-col gap-2 text-sm font-medium text-slate-700">
+      <span>
+        {label} {required && <span className="text-red-500">*</span>}
+      </span>
+      <div className="relative" ref={dropdownRef}>
+        <button
+          type="button"
+          onClick={() => setOpen((prev) => !prev)}
+          onBlur={onBlur}
+          className={`flex w-full items-center justify-between rounded-2xl border px-4 py-3 text-slate-900 focus:border-[#FF7A00] focus:bg-white focus:outline-none ${
+            error
+              ? "border-red-300 bg-red-50"
+              : "border-slate-200 bg-slate-50"
+          }`}
+        >
+          <span className={selected ? "" : "text-slate-400"}>
+            {selected ?? placeholder}
+          </span>
+          <ChevronDown className="h-4 w-4 text-slate-500" />
+        </button>
+        {open && (
+          <div className="absolute left-0 right-0 top-full z-[9999] mt-1 max-h-56 overflow-y-auto rounded-2xl border border-slate-200 bg-white py-1 text-sm shadow-lg">
+            {options.map((option) => (
+              <button
+                key={option}
+                type="button"
+                onMouseDown={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  onChange(option);
+                  setOpen(false);
+                }}
+                className={`flex w-full items-center px-4 py-2 text-left hover:bg-slate-50 ${
+                  option === value ? "bg-slate-50 text-slate-900" : "text-slate-700"
+                }`}
+              >
+                {option}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+      {error && (
+        <span className="text-xs text-red-600">{error}</span>
+      )}
+    </div>
+  );
+}
 
 export default function AddNewListingPage() {
   const router = useRouter();
@@ -403,7 +533,11 @@ export default function AddNewListingPage() {
                             <div className="absolute inset-0 hidden items-end justify-end bg-black/0 p-2 transition group-hover:flex group-hover:bg-black/10">
                               <button
                                 type="button"
-                                onClick={() => set("images", form.images.filter((_, i) => i !== slot))}
+                                onClick={() => {
+                                  const next = [...form.images];
+                                  next.splice(slot, 1);
+                                  set("images", next);
+                                }}
                                 className="rounded-full bg-black/60 px-2 py-1 text-[10px] text-white shadow"
                                 title="Remove"
                               >
@@ -476,54 +610,31 @@ export default function AddNewListingPage() {
             <section className="space-y-4">
               <h2 className="text-sm font-semibold text-[#1F2937]">1. Location Details</h2>
               <div className="grid gap-4 sm:grid-cols-2">
-                <label className="flex flex-col gap-2 text-sm font-medium text-slate-700">
-                  <span>
-                    District <span className="text-red-500">*</span>
-                  </span>
-                  <select
-                    value={form.location.district}
-                    onChange={(e) => {
-                      const d = e.target.value;
-                      setLocation("district", d);
-                      setLocation("colomboArea", d === "Colombo" ? form.location.colomboArea : null);
-                    }}
-                    onBlur={() => setTouched((t) => ({ ...t, district: true }))}
-                    className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 focus:border-[#FF7A00] focus:bg-white focus:outline-none"
-                  >
-                    <option value="">Select district</option>
-                    {DISTRICTS.map((d) => (
-                      <option key={d} value={d}>
-                        {d}
-                      </option>
-                    ))}
-                  </select>
-                  {showError("district") && (
-                    <span className="text-xs text-red-600">{errors.district}</span>
-                  )}
-                </label>
+                <ScrollableDropdown
+                  value={form.location.district}
+                  onChange={(d) => {
+                    setLocation("district", d);
+                    setLocation("colomboArea", d === "Colombo" ? form.location.colomboArea : null);
+                  }}
+                  onBlur={() => setTouched((t) => ({ ...t, district: true }))}
+                  options={DISTRICTS}
+                  placeholder="Select district"
+                  label="District"
+                  required
+                  error={showError("district") ? errors.district : undefined}
+                />
 
                 {isColombo && (
-                  <label className="flex flex-col gap-2 text-sm font-medium text-slate-700 transition-all">
-                    <span>
-                      Area in Colombo <span className="text-red-500">*</span>
-                    </span>
-                    <select
-                      value={form.location.colomboArea ?? ""}
-                      onChange={(e) => setLocation("colomboArea", e.target.value || null)}
-                      onBlur={() => setTouched((t) => ({ ...t, colomboArea: true }))}
-                      className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 focus:border-[#FF7A00] focus:bg-white focus:outline-none"
-                    >
-                      <option value="">Select area</option>
-                      {COLOMBO_AREAS.map((a) => (
-                        <option key={a} value={a}>
-                          {a}
-                        </option>
-                      ))}
-                    </select>
-                    {showError("colomboArea") && (
-                      <span className="text-xs text-red-600">{errors.colomboArea}</span>
-                    )}
-                  </label>
+                  <ScrollableDropdown
+                    value={form.location.colomboArea ?? ""}
+                    onChange={(value) => setLocation("colomboArea", value || null)}
+                    onBlur={() => setTouched((t) => ({ ...t, colomboArea: true }))}
+                    options={COLOMBO_AREAS}
+                    placeholder="Select area"
+                    label="Area in Colombo"
+                    required
+                    error={showError("colomboArea") ? errors.colomboArea : undefined}
+                  />
                 )}
               </div>
 

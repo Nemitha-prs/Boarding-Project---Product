@@ -359,7 +359,9 @@ export default function EditOwnerListingPage() {
                           <button
                             type="button"
                             onClick={() => {
-                              const next = (item.images ?? []).filter((_, i) => i !== slot);
+                              const base = item.images ?? [];
+                              const next = [...base];
+                              next.splice(slot, 1);
                               update("images", next);
                             }}
                             className="rounded-full bg-black/60 px-2 py-1 text-[10px] text-white shadow"
