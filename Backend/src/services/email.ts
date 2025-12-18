@@ -41,7 +41,7 @@ async function createTransporter() {
  * Send OTP code via email
  * Simple plain text email as required
  */
-export async function sendEmailOTP(email: string, otp: string, name: string): Promise<void> {
+export async function sendEmailOTP(email: string, otp: string, name: string, isPasswordReset: boolean = false): Promise<void> {
   // Validate env variables exist
   if (!ENV.EMAIL_USER || !ENV.EMAIL_PASSWORD) {
     const missing = [];
@@ -57,8 +57,10 @@ export async function sendEmailOTP(email: string, otp: string, name: string): Pr
   const mailOptions = {
     from: ENV.EMAIL_FROM || ENV.EMAIL_USER,
     to: email,
-    subject: "Your verification code",
-    text: `Your OTP is: ${otp}`,
+    subject: isPasswordReset ? "Password Reset Verification Code" : "Your verification code",
+    text: isPasswordReset 
+      ? `Your password reset OTP is: ${otp}\n\nThis code will expire in 10 minutes.`
+      : `Your OTP is: ${otp}`,
   };
 
   // Send email

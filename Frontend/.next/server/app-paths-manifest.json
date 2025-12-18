@@ -1,8 +1,4 @@
 {
-  "/signup/page": "app/signup/page.js",
   "/boardings/page": "app/boardings/page.js",
-  "/boardings/[id]/page": "app/boardings/[id]/page.js",
-  "/page": "app/page.js",
-  "/boardings/map/page": "app/boardings/map/page.js",
   "/owner-dashboard/page": "app/owner-dashboard/page.js"
 }

@@ -1,9 +1,14 @@
 {
   "pages": {
-    "/signup/page": [
+    "/boardings/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/signup/page.js"
+      "static/chunks/app/boardings/page.js"
+    ],
+    "/boardings/loading": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/boardings/loading.js"
     ],
     "/layout": [
       "static/chunks/webpack.js",
@@ -25,36 +30,6 @@
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
       "static/chunks/app/owner-dashboard/loading.js"
-    ],
-    "/boardings/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/boardings/page.js"
-    ],
-    "/boardings/loading": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/boardings/loading.js"
-    ],
-    "/boardings/map/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/boardings/map/page.js"
-    ],
-    "/boardings/[id]/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/boardings/[id]/page.js"
-    ],
-    "/boardings/[id]/loading": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/boardings/[id]/loading.js"
-    ],
-    "/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/page.js"
     ]
   }
 }

@@ -17,22 +17,21 @@ export default function LoginPage() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
 
-  // Handle token from OAuth redirect
+  // Handle token from redirect (if any)
   useEffect(() => {
     const token = searchParams.get("token");
-    const errorParam = searchParams.get("error");
-    
-    if (errorParam) {
-      setError(errorParam === "oauth_failed" ? "Google sign-in failed. Please try again." : "An error occurred during sign-in.");
-      return;
-    }
+    const redirect = searchParams.get("redirect");
     
     if (token) {
       setToken(token);
       setSuccess(true);
-      // Redirect to home or dashboard after short delay
+      // Redirect to redirect param, owner dashboard, or home
       setTimeout(() => {
-        router.push("/");
+        if (redirect) {
+          router.push(redirect);
+        } else {
+          router.push("/owner-dashboard");
+        }
       }, 1000);
     }
   }, [searchParams, router]);
@@ -52,14 +51,6 @@ export default function LoginPage() {
                 <h2 className="text-3xl font-semibold text-slate-900">Log in</h2>
                 <p className="text-sm text-slate-500">Access your account to manage your boardings.</p>
               </div>
-
-              <a
-                href={getApiUrl("/auth/google")}
-                className="mt-6 flex w-full items-center justify-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-800 shadow-sm transition hover:bg-slate-50"
-              >
-                <span className="h-4 w-4 rounded-full bg-white bg-[radial-gradient(circle_at_30%_30%,#FFCF33,#FF5733_40%,#4285F4_70%,#34A853)]" />
-                Continue with Google
-              </a>
 
               <form
                 className="mt-6 space-y-4"
@@ -83,9 +74,14 @@ export default function LoginPage() {
                     
                     setToken(data.token);
                     setSuccess(true);
-                    // Redirect to owner dashboard
+                    // Redirect to redirect param, owner dashboard, or home
+                    const redirect = searchParams.get("redirect");
                     setTimeout(() => {
-                      window.location.href = "/owner-dashboard";
+                      if (redirect) {
+                        router.push(redirect);
+                      } else {
+                        window.location.href = "/owner-dashboard";
+                      }
                     }, 1200);
                   } catch (err: any) {
                     setError(err.message || "Login failed");
@@ -127,7 +123,7 @@ export default function LoginPage() {
                     <input type="checkbox" className="rounded border-slate-300" />
                     Remember me
                   </label>
-                  <Link href="#" className="font-semibold text-brand-accent hover:underline">
+                  <Link href="/forgot-password" className="font-semibold text-brand-accent hover:underline">
                     Forgot password?
                   </Link>
                 </div>

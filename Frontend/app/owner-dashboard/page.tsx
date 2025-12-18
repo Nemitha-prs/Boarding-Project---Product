@@ -50,7 +50,7 @@ export default function OwnerDashboardPage() {
     { label: "Pending approvals", value: 0, icon: Home },
   ]);
 
-  // Handle token from OAuth redirect
+  // Handle token from redirect
   useEffect(() => {
     const token = searchParams.get("token");
     if (token) {

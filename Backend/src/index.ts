@@ -1,11 +1,11 @@
 import express from "express";
 import cors from "cors";
-import passport from "passport";
 import { ENV } from "./env";
 
 import authRoutes from "./routes/auth";
 import listingsRoutes from "./routes/listings";
 import bookmarksRoutes from "./routes/bookmarks";
+import reviewsRoutes from "./routes/reviews";
 import dbTestRoute from "./routes/dbTest";
 
 const app = express();
@@ -14,7 +14,6 @@ const app = express();
 app.use(cors());
 app.use(express.json({ limit: "5mb" }));
 app.use(express.urlencoded({ extended: true, limit: "5mb" }));
-app.use(passport.initialize());
 
 // Health check
 app.get("/health", (_req, res) => res.json({ ok: true }));
@@ -23,6 +22,7 @@ app.get("/health", (_req, res) => res.json({ ok: true }));
 app.use("/auth", authRoutes);
 app.use("/listings", listingsRoutes);
 app.use("/bookmarks", bookmarksRoutes);
+app.use("/reviews", reviewsRoutes);
 app.use("/api/db-test", dbTestRoute);
 
 // Not found handler
@@ -33,8 +33,9 @@ app.use((req, res) => {
 // Error handler (very simple for MVP)
 app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   // eslint-disable-next-line no-console
-  console.error(err);
-  res.status(500).json({ error: "Server error" });
+  console.error("Unhandled error:", err);
+  // Don't expose internal error details
+  res.status(500).json({ error: "An unexpected error occurred. Please try again." });
 });
 
 app.listen(ENV.PORT, () => {

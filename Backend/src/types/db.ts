@@ -6,7 +6,7 @@ export interface UserRow {
   id: string;
   email: string;
   passwordHash: string | null;
-  role: "owner";
+  role: "owner" | "user";
   name: string;
   age: number | null;
   phone: string | null;
@@ -42,5 +42,14 @@ export interface BookmarkRow {
   userId: string;
   listingId: string;
   createdAt: string;
+}
+
+export interface ReviewRow {
+  id: string;
+  boarding_id: string;
+  user_id: string;
+  rating: number; // 1-5
+  comment: string;
+  created_at: string;
 }
 

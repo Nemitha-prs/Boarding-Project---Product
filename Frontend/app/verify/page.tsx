@@ -22,15 +22,9 @@ export default function VerifyPage() {
 
   useEffect(() => {
     const emailParam = searchParams.get("email");
-    const source = searchParams.get("source");
     
     if (emailParam) {
       setEmail(emailParam);
-      // If coming from Google OAuth, OTP should already be sent
-      if (source === "google") {
-        setIsTimerActive(true);
-        setCountdown(300); // Start 5-minute timer
-      }
     }
   }, [searchParams]);
 

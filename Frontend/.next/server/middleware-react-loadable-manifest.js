@@ -1,1 +1,1 @@
-self.__REACT_LOADABLE_MANIFEST="{\"app\\\\boardings\\\\[id]\\\\page.tsx -> @/components/SingleBoardingMap\":{\"id\":\"app\\\\boardings\\\\[id]\\\\page.tsx -> @/components/SingleBoardingMap\",\"files\":[\"static/chunks/_app-pages-browser_components_SingleBoardingMap_tsx.js\"]}}"
+self.__REACT_LOADABLE_MANIFEST="{}"

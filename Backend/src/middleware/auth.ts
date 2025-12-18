@@ -1,5 +1,4 @@
 import type { Request, Response, NextFunction } from "express";
-import type { User as PassportUser } from "passport";
 import jwt from "jsonwebtoken";
 import { ENV } from "../env";
 
@@ -9,9 +8,9 @@ export interface AuthUser {
 
 declare global {
   namespace Express {
-    // augment Request to include user (compatible with Passport's User type)
+    // augment Request to include user
     interface Request {
-      user?: AuthUser | PassportUser;
+      user?: AuthUser;
     }
   }
 }

@@ -16,6 +16,8 @@ const SingleBoardingMap = dynamic(() => import("@/components/SingleBoardingMap")
 });
 import Gallery from "@/components/Gallery";
 import BookmarkButton from "@/components/BookmarkButton";
+import ReviewSection from "@/components/ReviewSection";
+import StarRating from "@/components/StarRating";
 import { incrementView } from "@/utils/views";
 import { incrementPendingApprovals } from "@/utils/pendingApprovals";
 import { useEffect, useState, useRef, useMemo } from "react";
@@ -82,10 +84,20 @@ function convertDbListingToBoarding(db: DbListing): BoardingListing {
   };
 }
 
+interface Review {
+  id: string;
+  rating: number;
+  comment: string;
+  created_at: string;
+  reviewer_name: string;
+  reviewer_email: string | null;
+}
+
 export default function BoardingDetailsPage({ params }: BoardingDetailsPageProps) {
   const searchParams = useSearchParams();
   const [listing, setListing] = useState<BoardingListing | null>(null);
   const [dbListing, setDbListing] = useState<DbListing | null>(null);
+  const [reviews, setReviews] = useState<Review[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const lastViewedId = useRef<string | null>(null);
@@ -175,6 +187,34 @@ export default function BoardingDetailsPage({ params }: BoardingDetailsPageProps
     fetchListing();
   }, [params.id]);
 
+  // Fetch reviews when boarding ID is available
+  useEffect(() => {
+    async function fetchReviews() {
+      if (!dbListing?.id) return;
+      
+      try {
+        const response = await fetch(getApiUrl(`/reviews/${dbListing.id}`));
+        if (response.ok) {
+          const data = await response.json();
+          setReviews(data || []);
+          console.log("Fetched reviews:", data);
+        } else {
+          console.error("Failed to fetch reviews:", response.status, response.statusText);
+        }
+      } catch (err) {
+        console.error("Error fetching reviews:", err);
+      }
+    }
+    
+    fetchReviews();
+  }, [dbListing?.id]);
+
+  // Calculate average rating
+  const averageRating = useMemo(() => {
+    if (reviews.length === 0) return 0;
+    return reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length;
+  }, [reviews]);
+
   // Increment view count when the listing page is opened (once per page load)
   useEffect(() => {
     // Only increment if this is a new page load (params.id changed) and listing is loaded
@@ -235,19 +275,29 @@ export default function BoardingDetailsPage({ params }: BoardingDetailsPageProps
               <article className="overflow-hidden rounded-3xl bg-white shadow-sm ring-1 ring-gray-100">
                 <div className="border-b border-gray-100 bg-white/80 px-6 py-6 sm:px-8 sm:py-7">
                   <div className="flex items-start justify-between gap-4">
-                    <div>
+                    <div className="flex-1">
                       <p className="text-xs font-semibold uppercase tracking-[0.3em] text-slate-500">
                         Listing #{listing.id}
                       </p>
                       <h2 className="mt-2 text-2xl font-semibold text-[#1F2937] sm:text-3xl">
                         {listing.title}
                       </h2>
-                      <p className="mt-1 text-sm text-slate-600">
-                        {listing.roomType}
-                        {distanceInfo.distance && distanceInfo.locationName && (
-                          <> · {distanceInfo.distance} to {distanceInfo.locationName}</>
+                      <div className="mt-2 flex items-center gap-3">
+                        {averageRating > 0 && (
+                          <StarRating rating={averageRating} size="md" showNumber />
                         )}
-                      </p>
+                        <p className="text-sm text-slate-600">
+                          {listing.roomType}
+                          {distanceInfo.distance && distanceInfo.locationName && (
+                            <> · {distanceInfo.distance} to {distanceInfo.locationName}</>
+                          )}
+                        </p>
+                      </div>
+                      {averageRating > 0 && reviews.length > 0 && (
+                        <p className="mt-1 text-xs text-slate-500">
+                          {reviews.length} {reviews.length === 1 ? "review" : "reviews"}
+                        </p>
+                      )}
                     </div>
                     {dbListing && <BookmarkButton listingId={dbListing.id} />}
                   </div>
@@ -339,6 +389,9 @@ export default function BoardingDetailsPage({ params }: BoardingDetailsPageProps
               </div>
             </div>
             </article>
+            {listing && dbListing && (
+              <ReviewSection boardingId={dbListing.id} />
+            )}
             <div className="mt-6 text-center">
               <Link
                 href="/boardings"

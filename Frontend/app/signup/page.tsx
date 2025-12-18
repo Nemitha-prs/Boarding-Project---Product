@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
@@ -9,6 +9,7 @@ import { getApiUrl, setToken } from "@/lib/auth";
 
 export default function SignupPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   // Form state
   const [name, setName] = useState("");
@@ -389,7 +390,12 @@ export default function SignupPage() {
       if (data.token) {
         setToken(data.token);
         window.dispatchEvent(new Event("storage"));
-        router.push("/owner-dashboard");
+        const redirect = searchParams.get("redirect");
+        if (redirect) {
+          router.push(redirect);
+        } else {
+          router.push("/owner-dashboard");
+        }
       } else {
         throw new Error("No token received");
       }
