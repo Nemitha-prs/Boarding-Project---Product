@@ -25,9 +25,9 @@ export default function WhyChooseUs() {
             Why students choose Anexlk
           </h2>
           <p className="mt-5 text-sm text-gray-700 sm:text-base">
-            Finding a good boarding place shouldn't feel risky or confusing.
+            Finding a good boarding place shouldn&apos;t feel risky or confusing.
             Anexlk focuses on clarity, trust, and the details that actually
-            matter when you're living away from home.
+            matter when you&apos;re living away from home.
           </p>
 
           <ul className="mt-8 space-y-4">
