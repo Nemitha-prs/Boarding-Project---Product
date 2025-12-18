@@ -1,8 +1,5 @@
 {
   "/boardings/page": "app/boardings/page.js",
   "/owner-dashboard/page": "app/owner-dashboard/page.js",
-  "/login/page": "app/login/page.js",
-  "/signup/page": "app/signup/page.js",
-  "/owner-dashboard/new/page": "app/owner-dashboard/new/page.js",
-  "/boardings/[id]/page": "app/boardings/[id]/page.js"
+  "/page": "app/page.js"
 }
