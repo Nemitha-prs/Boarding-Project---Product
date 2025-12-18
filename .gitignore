@@ -1,41 +1,233 @@
+# ============================================
 # Dependencies
+# ============================================
 node_modules/
 Frontend/node_modules/
 Backend/node_modules/
+.pnp
+.pnp.js
 
+# ============================================
 # Build outputs
+# ============================================
 .next/
 Frontend/.next/
 Backend/dist/
 Backend/build/
+out/
+build/
+*.tsbuildinfo
 
-# Environment variables
+# ============================================
+# Environment variables (CRITICAL - DO NOT COMMIT)
+# ============================================
 .env
-.env.local
-.env*.local
-Frontend/.env.local
+.env.*
+!.env.example
+!.env*.example
+Frontend/.env
+Frontend/.env.*
+!Frontend/.env.example
+!Frontend/.env*.example
 Backend/.env
+Backend/.env.*
+!Backend/.env.example
+!Backend/.env*.example
 
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
+# ============================================
+# Supabase
+# ============================================
+.supabase/
+supabase/.temp/
 
-# OS
-.DS_Store
-Thumbs.db
-
+# ============================================
 # Logs
+# ============================================
 *.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+logs/
+*.log.*
 
-# Package locks (optional - some teams prefer to commit these)
+# ============================================
+# OS-specific files
+# ============================================
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+*.stackdump
+[Dd]esktop.ini
+$RECYCLE.BIN/
+*.cab
+*.msi
+*.msix
+*.msm
+*.msp
+*.lnk
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+.Spotlight-V100
+.Trashes
+
+# Linux
+*~
+.directory
+.Trash-*
+
+# ============================================
+# IDE and editors
+# ============================================
+.vscode/
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea/
+*.swp
+*.swo
+*.swn
+*~
+.project
+.classpath
+.settings/
+*.sublime-project
+*.sublime-workspace
+
+# ============================================
+# Testing
+# ============================================
+coverage/
+*.lcov
+.nyc_output/
+.jest/
+*.test.js.snap
+
+# ============================================
+# Temporary files
+# ============================================
+*.tmp
+*.temp
+*.cache
+.cache/
+.temp/
+tmp/
+temp/
+
+# ============================================
+# Large media files (prevent GitHub 100MB issues)
+# ============================================
+# Images over 10MB
+*.jpg
+*.jpeg
+*.png
+*.gif
+*.bmp
+*.tiff
+*.webp
+!Frontend/public/images/*.jpg
+!Frontend/public/images/*.jpeg
+!Frontend/public/images/*.png
+!Frontend/public/images/*.webp
+!Frontend/public/logo/*.png
+
+# Videos
+*.mp4
+*.avi
+*.mov
+*.wmv
+*.flv
+*.webm
+
+# Archives
+*.zip
+*.tar
+*.tar.gz
+*.rar
+*.7z
+
+# Large data files
+*.db
+*.sqlite
+*.sqlite3
+*.dump
+
+# ============================================
+# Uploads and user-generated content
+# ============================================
+uploads/
+public/uploads/
+Backend/uploads/
+Frontend/public/uploads/
+listing-images/
+*.upload
+
+# ============================================
+# Package manager files
+# ============================================
+# Uncomment if you want to ignore lock files
 # package-lock.json
 # yarn.lock
+# pnpm-lock.yaml
 
+# ============================================
+# Next.js specific
+# ============================================
+.next/
+.vercel
+*.pem
 
+# ============================================
+# TypeScript
+# ============================================
+*.tsbuildinfo
+next-env.d.ts
 
+# ============================================
+# Misc
+# ============================================
+*.pid
+*.seed
+*.pid.lock
+.npm
+.eslintcache
+.stylelintcache
+.parcel-cache
+.swc/
+*.swp
+*.swo
+*~
+.DS_Store
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# ============================================
+# Backup files
+# ============================================
+*.bak
+*.backup
+*.old
+*_backup
+*_old
+
+# ============================================
+# Documentation build outputs
+# ============================================
+docs/_build/
+site/
+
+# ============================================
+# Scripts and utilities (if temporary)
+# ============================================
+find-large-files.ps1
+all-files.txt
+Frontend/all-files.txt
