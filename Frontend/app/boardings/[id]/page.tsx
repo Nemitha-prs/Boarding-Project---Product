@@ -282,18 +282,27 @@ export default function BoardingDetailsPage({ params }: BoardingDetailsPageProps
                       <h2 className="mt-2 text-2xl font-semibold text-[#1F2937] sm:text-3xl">
                         {listing.title}
                       </h2>
-                      <div className="mt-2 flex items-center gap-3">
-                        {averageRating > 0 && (
-                          <StarRating rating={averageRating} size="md" showNumber />
+                      <div className="mt-2 flex items-center gap-3 flex-wrap">
+                        {reviews.length > 0 ? (
+                          <>
+                            <StarRating rating={averageRating} size="md" showNumber />
+                            <p className="text-sm text-slate-600">
+                              {listing.roomType}
+                              {distanceInfo.distance && distanceInfo.locationName && (
+                                <> · {distanceInfo.distance} to {distanceInfo.locationName}</>
+                              )}
+                            </p>
+                          </>
+                        ) : (
+                          <p className="text-sm text-slate-600">
+                            {listing.roomType}
+                            {distanceInfo.distance && distanceInfo.locationName && (
+                              <> · {distanceInfo.distance} to {distanceInfo.locationName}</>
+                            )}
+                          </p>
                         )}
-                        <p className="text-sm text-slate-600">
-                          {listing.roomType}
-                          {distanceInfo.distance && distanceInfo.locationName && (
-                            <> · {distanceInfo.distance} to {distanceInfo.locationName}</>
-                          )}
-                        </p>
                       </div>
-                      {averageRating > 0 && reviews.length > 0 && (
+                      {reviews.length > 0 && (
                         <p className="mt-1 text-xs text-slate-500">
                           {reviews.length} {reviews.length === 1 ? "review" : "reviews"}
                         </p>

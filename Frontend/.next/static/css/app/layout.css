@@ -1450,9 +1450,6 @@ video {
 .bg-white\/95 {
   background-color: rgb(255 255 255 / 0.95);
 }
-.bg-\[radial-gradient\(circle_at_30\%_30\%\2c \#FFCF33\2c \#FF5733_40\%\2c \#4285F4_70\%\2c \#34A853\)\] {
-  background-image: radial-gradient(circle at 30% 30%,#FFCF33,#FF5733 40%,#4285F4 70%,#34A853);
-}
 .bg-gradient-to-b {
   background-image: linear-gradient(to bottom, var(--tw-gradient-stops));
 }
