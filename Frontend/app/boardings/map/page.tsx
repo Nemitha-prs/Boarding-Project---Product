@@ -1,10 +1,68 @@
+"use client";
+
+import { useEffect, useState } from "react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import MapView from "@/components/MapView";
-import { listings } from "@/lib/fakeData";
 import Link from "next/link";
+import { getApiUrl } from "@/lib/auth";
+import { stringIdToNumeric } from "@/utils/idConverter";
+
+interface DbListing {
+  id: string;
+  title: string;
+  lat: number | null;
+  lng: number | null;
+  boardingType?: string;
+  status: "Active" | "Not-active";
+}
 
 export default function BoardingsMapPage() {
+  const [listings, setListings] = useState<Array<{
+    id: string;
+    title: string;
+    lat: number | null;
+    lng: number | null;
+    roomType?: string;
+    numericId?: number;
+  }>>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    async function fetchListingsForMap() {
+      try {
+        setLoading(true);
+        setError("");
+        
+        // Fetch only active listings
+        const response = await fetch(getApiUrl("/listings?status=Active"));
+        if (!response.ok) {
+          throw new Error("Failed to fetch listings for map");
+        }
+        
+        const data: DbListing[] = await response.json();
+        // Transform data for MapView with numeric IDs for routing
+        const mapListings = data.map((listing) => ({
+          id: listing.id,
+          title: listing.title,
+          lat: listing.lat,
+          lng: listing.lng,
+          roomType: listing.boardingType,
+          numericId: stringIdToNumeric(listing.id),
+        }));
+        setListings(mapListings);
+      } catch (err: any) {
+        console.error("Error fetching listings for map:", err);
+        setError(err.message || "Failed to load listings for map");
+      } finally {
+        setLoading(false);
+      }
+    }
+    
+    fetchListingsForMap();
+  }, []);
+
   return (
     <>
       <Navbar />
@@ -17,7 +75,7 @@ export default function BoardingsMapPage() {
                   Explore
                 </p>
                 <h1 className="text-3xl font-bold tracking-tight text-[#1F2937] sm:text-4xl">
-                  Map of boardings near you
+                  Map of all boardings
                 </h1>
               </div>
               <Link
@@ -28,12 +86,22 @@ export default function BoardingsMapPage() {
               </Link>
             </div>
             <p className="max-w-2xl text-sm text-slate-600 sm:text-base">
-              View all nearby boardings on a single map. This map preview is powered by placeholder content and can later be wired up to a real map provider.
+              View all available boardings on a single map.
             </p>
           </header>
 
           <div className="rounded-3xl bg-white p-4 shadow-sm ring-1 ring-gray-100 sm:p-5">
-            <MapView listings={listings} />
+            {loading ? (
+              <div className="flex aspect-square items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-slate-50 text-center text-sm text-slate-500">
+                Loading boardings map...
+              </div>
+            ) : error ? (
+              <div className="flex aspect-square items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-red-50 text-center text-sm text-red-600">
+                Error: {error}
+              </div>
+            ) : (
+              <MapView listings={listings} />
+            )}
           </div>
 
           <div className="sm:hidden">

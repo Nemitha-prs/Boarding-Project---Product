@@ -14,13 +14,18 @@ export async function incrementPendingApprovals(listingId: string): Promise<numb
       headers: { "Content-Type": "application/json" },
     });
     if (!response.ok) {
-      throw new Error("Failed to increment pending approvals");
+      const errorData = await response.json().catch(() => ({}));
+      console.error("Failed to increment pending approvals:", response.status, errorData);
+      throw new Error(errorData.error || "Failed to increment pending approvals");
     }
     const data = await response.json();
-    return data.pendingApprovals || 0;
-  } catch (error) {
+    const newCount = data.pendingApprovals || 0;
+    console.log(`Successfully incremented pending approvals for listing ${listingId}: ${newCount}`);
+    return newCount;
+  } catch (error: any) {
     console.error("Error incrementing pending approvals:", error);
-    return 0;
+    // Re-throw error so caller can handle it
+    throw error;
   }
 }
 

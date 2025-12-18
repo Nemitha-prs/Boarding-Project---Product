@@ -27,7 +27,7 @@ export default function Navbar() {
   }, []);
 
   useEffect(() => {
-    // Check authentication status
+    // Check authentication status on mount
     setAuthenticated(isAuthenticated());
     setIsOwner(getCurrentUserRole() === "owner");
     
@@ -38,15 +38,8 @@ export default function Navbar() {
     };
     window.addEventListener("storage", handleStorageChange);
     
-    // Also check on mount and when component becomes visible
-    const interval = setInterval(() => {
-      setAuthenticated(isAuthenticated());
-      setIsOwner(getCurrentUserRole() === "owner");
-    }, 1000);
-    
     return () => {
       window.removeEventListener("storage", handleStorageChange);
-      clearInterval(interval);
     };
   }, []);
 

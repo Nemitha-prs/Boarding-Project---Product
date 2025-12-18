@@ -7,6 +7,16 @@ import Footer from "@/components/Footer";
 import Link from "next/link";
 import { fetchWithAuth, isAuthenticated } from "@/lib/auth";
 import { getCurrentUserRole } from "@/lib/jwt";
+import dynamic from "next/dynamic";
+
+const BoardingLocationMap = dynamic(() => import("@/components/BoardingLocationMap"), {
+  ssr: false,
+  loading: () => (
+    <div className="flex h-56 w-full items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 text-sm text-slate-500">
+      Loading map...
+    </div>
+  ),
+});
 
 type FormData = {
   basic: {
@@ -259,18 +269,10 @@ export default function AddNewListingPage() {
     setHasSubmitted(false);
   }
 
-  // Map click handler (UI-only). Convert click to a rough lat/lng within Sri Lanka bounds
-  function onMapClick(e: React.MouseEvent<HTMLDivElement>) {
-    const rect = (e.target as HTMLDivElement).getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
-    const nx = Math.min(Math.max(x / rect.width, 0), 1);
-    const ny = Math.min(Math.max(y / rect.height, 0), 1);
-    // Sri Lanka rough bounds: lat 5.9..9.9, lng 79.6..81.9
-    const lat = 5.9 + (1 - ny) * (9.9 - 5.9);
-    const lng = 79.6 + nx * (81.9 - 79.6);
-    setLocation("lat", Number(lat.toFixed(5)));
-    setLocation("lng", Number(lng.toFixed(5)));
+  // Handle map location selection
+  function handleMapSelect(lat: number, lng: number) {
+    setLocation("lat", Number(lat.toFixed(6)));
+    setLocation("lng", Number(lng.toFixed(6)));
   }
 
   if (submitted) {
@@ -500,47 +502,11 @@ export default function AddNewListingPage() {
 
               <div className="space-y-2">
                 <p className="text-xs font-medium text-slate-600">Map location <span className="text-red-500">*</span></p>
-                <div
-                  onClick={onMapClick}
-                  className="relative h-56 w-full cursor-crosshair overflow-hidden rounded-2xl border border-slate-200 bg-gradient-to-br from-slate-100 to-slate-200 shadow-inner"
-                  aria-label="Map selector (UI-only)"
-                  role="button"
-                  tabIndex={0}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      // simulate center click
-                      const target = e.currentTarget as HTMLDivElement;
-                      const rect = target.getBoundingClientRect();
-                      const fakeEvent = {
-                        clientX: rect.left + rect.width / 2,
-                        clientY: rect.top + rect.height / 2,
-                        target,
-                      } as unknown as React.MouseEvent<HTMLDivElement>;
-                      onMapClick(fakeEvent);
-                    }
-                  }}
-                >
-                  {form.location.lat !== null && form.location.lng !== null && (
-                    <div
-                      className="pointer-events-none absolute inset-0"
-                      style={{}}
-                    >
-                      <div
-                        className="absolute -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-[#FF7A00] shadow"
-                        style={{
-                          left: `${50 + ((form.location.lng - 79.6) / (81.9 - 79.6)) * 100 - 50}%`,
-                          top: `${50 - ((form.location.lat - 5.9) / (9.9 - 5.9)) * 100}%`,
-                          width: 14,
-                          height: 14,
-                        }}
-                        aria-hidden
-                      />
-                    </div>
-                  )}
-                  <span className="absolute bottom-2 left-2 rounded-full bg-white/80 px-2 py-1 text-[10px] font-medium text-slate-700 shadow">
-                    Click to set approximate location
-                  </span>
-                </div>
+                <BoardingLocationMap
+                  lat={form.location.lat}
+                  lng={form.location.lng}
+                  onSelect={handleMapSelect}
+                />
                 {showError("map") && <span className="text-xs text-red-600">{errors.map}</span>}
                 {form.location.lat !== null && form.location.lng !== null && (
                   <p className="text-xs text-slate-600">

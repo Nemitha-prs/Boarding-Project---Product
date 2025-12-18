@@ -40,7 +40,7 @@ export default function OwnerDashboardPage() {
   const searchParams = useSearchParams();
   const [selectedStatus, setSelectedStatus] = useState<"all" | "active" | "not-active">("all");
   const [ownerListings, setOwnerListings] = useState<DbListing[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -103,18 +103,6 @@ export default function OwnerDashboardPage() {
       }
     }
     fetchOwnerListings();
-    
-    // Refresh listings when page becomes visible (e.g., when returning from new listing page)
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === "visible") {
-        fetchOwnerListings();
-      }
-    };
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-    
-    return () => {
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-    };
   }, []);
 
   // Compute stats whenever ownerListings changes

@@ -5,9 +5,10 @@ import { jwtMiddleware, requireOwner } from "../middleware/auth";
 
 const router = Router();
 
-// GET /listings (public) - can filter by ownerId query parameter
+// GET /listings (public) - can filter by ownerId and status query parameters
 router.get("/", async (req, res) => {
   const ownerId = req.query.ownerId as string | undefined;
+  const status = req.query.status as string | undefined;
   
   let query = supabase
     .from("listings")
@@ -18,52 +19,167 @@ router.get("/", async (req, res) => {
     query = query.eq("ownerId", ownerId);
   }
   
+  if (status) {
+    query = query.eq("status", status);
+  }
+  
   const { data, error } = await query;
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) {
+    console.error("Error fetching listings:", error);
+    return res.status(500).json({ error: error.message });
+  }
   return res.json(data ?? []);
+});
+
+// Helper function to convert string ID to numeric (same as frontend)
+function stringIdToNumeric(id: string): number {
+  let numericId = 0;
+  if (id) {
+    for (let i = 0; i < id.length; i++) {
+      numericId = ((numericId << 5) - numericId) + id.charCodeAt(i);
+      numericId = numericId & numericId; // Convert to 32-bit integer
+    }
+    numericId = Math.abs(numericId);
+  }
+  return numericId;
+}
+
+// GET /listings/by-numeric-id/:numericId (public) - fetch listing by numeric ID
+router.get("/by-numeric-id/:numericId", async (req, res) => {
+  const numericIdParam = req.params.numericId;
+  const numericId = parseInt(numericIdParam, 10);
+  
+  if (isNaN(numericId)) {
+    return res.status(400).json({ error: "Invalid numeric ID" });
+  }
+  
+  // First, fetch only id fields from active listings (much smaller payload)
+  const { data: activeListingIds, error: fetchError } = await supabase
+    .from("listings")
+    .select("id")
+    .eq("status", "Active");
+  
+  if (fetchError) {
+    console.error("Error fetching listings:", fetchError);
+    return res.status(500).json({ error: fetchError.message });
+  }
+  
+  if (!activeListingIds || activeListingIds.length === 0) {
+    return res.status(404).json({ error: "Listing not found" });
+  }
+  
+  // Find the listing ID with matching numeric ID
+  const matchingId = activeListingIds.find((listing) => {
+    const listingNumericId = stringIdToNumeric(listing.id);
+    return listingNumericId === numericId;
+  });
+  
+  if (!matchingId) {
+    return res.status(404).json({ error: "Listing not found" });
+  }
+  
+  // Now fetch only the specific listing's full data
+  const { data: matchingListing, error: detailError } = await supabase
+    .from("listings")
+    .select("*")
+    .eq("id", matchingId.id)
+    .single();
+  
+  if (detailError || !matchingListing) {
+    console.error("Error fetching listing details:", detailError);
+    return res.status(404).json({ error: "Listing not found" });
+  }
+  
+  // Fetch owner info for contact details
+  if (matchingListing.ownerId) {
+    const { data: owner, error: ownerError } = await supabase
+      .from("users")
+      .select("id, name, phone, email")
+      .eq("id", matchingListing.ownerId)
+      .single();
+    if (!ownerError && owner) {
+      return res.json({ ...matchingListing, owner });
+    }
+  }
+  
+  return res.json(matchingListing);
 });
 
 // POST /listings/:id/increment-pending-approvals (public) - MUST be before /:id route
 router.post("/:id/increment-pending-approvals", async (req, res) => {
   const id = req.params.id;
 
-  // Check if listing exists
-  const { data: listing, error: getErr } = await supabase
-    .from("listings")
-    .select("id, pendingApprovals")
-    .eq("id", id)
-    .single();
-  if (getErr || !listing) return res.status(404).json({ error: "Listing not found" });
-
-  // Increment pending approvals (handle case where column might not exist yet)
-  const currentCount = typeof listing.pendingApprovals === "number" ? listing.pendingApprovals : 0;
-  const { data, error } = await supabase
-    .from("listings")
-    .update({ 
-      pendingApprovals: currentCount + 1,
-      updatedAt: new Date().toISOString()
-    })
-    .eq("id", id)
-    .select("pendingApprovals")
-    .single();
+  // Use atomic RPC function for increment (most reliable, prevents race conditions)
+  const { data: rpcData, error: rpcError } = await supabase.rpc('increment_pending_approvals', { listing_id: id });
   
-  if (error) {
-    // If column doesn't exist, return a helpful error
-    if (error.message?.includes("pendingApprovals") || error.message?.includes("column")) {
-      return res.status(500).json({ 
-        error: "Database column 'pendingApprovals' does not exist. Please add it to the listings table." 
-      });
-    }
-    return res.status(500).json({ error: error.message });
+  if (!rpcError && rpcData !== null && rpcData !== undefined) {
+    return res.json({ pendingApprovals: typeof rpcData === 'number' ? rpcData : (rpcData as any).pendingApprovals || 0 });
   }
-  return res.json({ pendingApprovals: data.pendingApprovals });
+  
+  // Fallback: if RPC function doesn't exist, use two-step approach (less ideal but works)
+  // This has a small race condition window but is acceptable as fallback
+  if (rpcError && (rpcError.message?.includes('function') || rpcError.message?.includes('does not exist'))) {
+    // Check if listing exists first
+    const { data: listing, error: checkErr } = await supabase
+      .from("listings")
+      .select("id, pendingApprovals")
+      .eq("id", id)
+      .single();
+    
+    if (checkErr || !listing) {
+      return res.status(404).json({ error: "Listing not found" });
+    }
+    
+    // Increment pending approvals
+    const currentCount = typeof listing.pendingApprovals === "number" ? listing.pendingApprovals : 0;
+    const { data: updated, error: updateError } = await supabase
+      .from("listings")
+      .update({ 
+        pendingApprovals: currentCount + 1,
+        updatedAt: new Date().toISOString()
+      })
+      .eq("id", id)
+      .select("pendingApprovals")
+      .single();
+    
+    if (updateError) {
+      if (updateError.message?.includes("pendingApprovals") || updateError.message?.includes("column")) {
+        return res.status(500).json({ 
+          error: "Database column 'pendingApprovals' does not exist. Please add it to the listings table." 
+        });
+      }
+      return res.status(500).json({ error: updateError.message });
+    }
+    
+    return res.json({ pendingApprovals: updated?.pendingApprovals || 0 });
+  }
+  
+  // Handle other RPC errors
+  if (rpcError) {
+    if (rpcError.message?.includes("Listing not found")) {
+      return res.status(404).json({ error: "Listing not found" });
+    }
+    return res.status(500).json({ error: rpcError.message || "Failed to increment pending approvals" });
+  }
+  
+  return res.json({ pendingApprovals: 0 });
 });
 
 // GET /listings/:id (public)
 router.get("/:id", async (req, res) => {
   const id = req.params.id;
-  const { data, error } = await supabase.from("listings").select("*").eq("id", id).single();
+  // Use SELECT * to avoid issues if pendingApprovals column doesn't exist yet
+  const { data, error } = await supabase
+    .from("listings")
+    .select("*")
+    .eq("id", id)
+    .single();
   if (error) return res.status(404).json({ error: "Listing not found" });
+  
+  // Ensure pendingApprovals exists (default to 0 if column doesn't exist)
+  if (data && typeof data.pendingApprovals !== "number") {
+    data.pendingApprovals = 0;
+  }
   
   // Also fetch owner info for contact details
   if (data?.ownerId) {
@@ -117,7 +233,6 @@ router.post("/", jwtMiddleware, requireOwner, async (req, res) => {
     facilities: Array.isArray(body.facilities) ? body.facilities : [],
     images: Array.isArray(body.images) ? body.images : [],
     rating: typeof body.rating === "number" ? body.rating : 0,
-    pendingApprovals: typeof body.pendingApprovals === "number" ? body.pendingApprovals : 0,
     status: (body.status as OwnerStatus) ?? "Active",
     ownerId: (req.user as any).id,
     createdAt: now,
@@ -125,7 +240,16 @@ router.post("/", jwtMiddleware, requireOwner, async (req, res) => {
   };
 
   const { data, error } = await supabase.from("listings").insert(insert).select("*").single();
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) {
+    // If error mentions pendingApprovals or schema cache, it's likely the column doesn't exist
+    // But since we're not including it in insert, this shouldn't happen unless SELECT * tries to get it
+    // The error is likely from SELECT * trying to fetch a non-existent column
+    return res.status(500).json({ error: error.message });
+  }
+  // Ensure pendingApprovals exists in response (default to 0 if column doesn't exist)
+  if (data && typeof (data as any).pendingApprovals !== "number") {
+    (data as any).pendingApprovals = 0;
+  }
   return res.status(201).json(data);
 });
 

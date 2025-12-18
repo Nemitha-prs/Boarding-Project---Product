@@ -4,13 +4,21 @@ import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import FilterBar from "@/components/FilterBar";
 import ListingCard from "@/components/ListingCard";
-import { getBookmarks } from "@/utils/bookmarks";
-import { getApiUrl } from "@/lib/auth";
+import { getBookmarks, fetchUserBookmarks } from "@/utils/bookmarks";
+import { getApiUrl, isAuthenticated } from "@/lib/auth";
 import type { BoardingListing } from "@/lib/fakeData";
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { ChevronDown } from "lucide-react";
+import { stringIdToNumeric } from "@/utils/idConverter";
+import {
+  UNIVERSITY_COORDS,
+  DISTRICT_COORDS,
+  COLOMBO_CITY_COORDS,
+  getReferenceCoordinate as getRefCoord,
+  haversineKm,
+  type Coordinate,
+} from "@/utils/distance";
 
 type FiltersState = {
   maxPrice: number;
@@ -25,11 +33,6 @@ type LocationState = {
   selectedUniversity: string | null;
   selectedDistrict: string | null;
   selectedCity: string | null;
-};
-
-type Coordinate = {
-  lat: number;
-  lng: number;
 };
 
 type DropdownOption = {
@@ -63,16 +66,8 @@ function convertDbListingToBoarding(db: DbListing): BoardingListing {
   const coverImage = db.images && db.images.length > 0 ? db.images[0] : "/images/board1.jpg";
   const location = db.colomboArea || db.district;
   
-  // Convert string ID to number for compatibility with existing components
-  // Use a hash of the string ID to get a consistent number
-  let numericId = 0;
-  if (db.id) {
-    for (let i = 0; i < db.id.length; i++) {
-      numericId = ((numericId << 5) - numericId) + db.id.charCodeAt(i);
-      numericId = numericId & numericId; // Convert to 32-bit integer
-    }
-    numericId = Math.abs(numericId);
-  }
+  // Convert string ID to number using the shared utility function
+  const numericId = stringIdToNumeric(db.id);
   
   return {
     id: numericId,
@@ -173,8 +168,23 @@ const COLOMBO_CITY_OPTIONS: { code: string; name: string }[] = [
   { code: "Colombo 15", name: "Mutwal" },
   { code: "Dehiwala", name: "Dehiwala" },
   { code: "Mount Lavinia", name: "Mount Lavinia" },
-  { code: "Nugegoda", name: "Nugegoda" },
+  { code: "Ratmalana", name: "Ratmalana" },
+  { code: "Moratuwa", name: "Moratuwa" },
+  { code: "Piliyandala", name: "Piliyandala" },
+  { code: "Kesbewa", name: "Kesbewa" },
   { code: "Maharagama", name: "Maharagama" },
+  { code: "Nugegoda", name: "Nugegoda" },
+  { code: "Kottawa", name: "Kottawa" },
+  { code: "Homagama", name: "Homagama" },
+  { code: "Malabe", name: "Malabe" },
+  { code: "Athurugiriya", name: "Athurugiriya" },
+  { code: "Kaduwela", name: "Kaduwela" },
+  { code: "Kolonnawa", name: "Kolonnawa" },
+  { code: "Angoda", name: "Angoda" },
+  { code: "Battaramulla", name: "Battaramulla" },
+  { code: "Rajagiriya", name: "Rajagiriya" },
+  { code: "Wellampitiya", name: "Wellampitiya" },
+  { code: "Ja-Ela", name: "Ja-Ela" },
 ];
 
 const UNIVERSITY_AREAS: Record<string, string[]> = {
@@ -359,62 +369,6 @@ const UNIVERSITY_AREAS: Record<string, string[]> = {
   ],
 };
 
-const UNIVERSITY_COORDS: Record<string, Coordinate> = {
-  "University of Colombo": { lat: 6.9016, lng: 79.8607 },
-  "University of Moratuwa": { lat: 6.7969, lng: 79.9018 },
-  "SLIIT Malabe": { lat: 6.9147, lng: 79.9733 },
-  "University of Sri Jayewardenepura": { lat: 6.8528, lng: 79.9040 },
-};
-
-const DISTRICT_COORDS: Record<string, Coordinate> = {
-  Colombo: { lat: 6.9271, lng: 79.8612 },
-  Gampaha: { lat: 7.0873, lng: 80.0144 },
-  Kalutara: { lat: 6.5854, lng: 79.9607 },
-  Kandy: { lat: 7.2906, lng: 80.6337 },
-  Matale: { lat: 7.4675, lng: 80.6234 },
-  "Nuwara Eliya": { lat: 6.9497, lng: 80.7891 },
-  Galle: { lat: 6.0535, lng: 80.2210 },
-  Matara: { lat: 5.9549, lng: 80.5550 },
-  Hambantota: { lat: 6.1246, lng: 81.1185 },
-  Jaffna: { lat: 9.6615, lng: 80.0255 },
-  Kilinochchi: { lat: 9.3975, lng: 80.4053 },
-  Mannar: { lat: 8.9770, lng: 79.9040 },
-  Vavuniya: { lat: 8.7542, lng: 80.4983 },
-  Mullaitivu: { lat: 9.2671, lng: 80.8140 },
-  Batticaloa: { lat: 7.7436, lng: 81.7010 },
-  Ampara: { lat: 7.3018, lng: 81.6747 },
-  Trincomalee: { lat: 8.5874, lng: 81.2152 },
-  Kurunegala: { lat: 7.4863, lng: 80.3623 },
-  Puttalam: { lat: 8.0408, lng: 79.8390 },
-  Anuradhapura: { lat: 8.3114, lng: 80.4037 },
-  Polonnaruwa: { lat: 7.9403, lng: 81.0023 },
-  Badulla: { lat: 6.9934, lng: 81.0550 },
-  Monaragala: { lat: 6.8726, lng: 81.3509 },
-  Ratnapura: { lat: 6.7056, lng: 80.3847 },
-  Kegalle: { lat: 7.2513, lng: 80.3464 },
-};
-
-const COLOMBO_CITY_COORDS: Record<string, Coordinate> = {
-  "Colombo 01": { lat: 6.9355, lng: 79.8428 },
-  "Colombo 02": { lat: 6.9214, lng: 79.8482 },
-  "Colombo 03": { lat: 6.9100, lng: 79.8539 },
-  "Colombo 04": { lat: 6.9008, lng: 79.8652 },
-  "Colombo 05": { lat: 6.8912, lng: 79.8777 },
-  "Colombo 06": { lat: 6.8750, lng: 79.8697 },
-  "Colombo 07": { lat: 6.9067, lng: 79.8680 },
-  "Colombo 08": { lat: 6.9106, lng: 79.8870 },
-  "Colombo 09": { lat: 6.9380, lng: 79.8656 },
-  "Colombo 10": { lat: 6.9350, lng: 79.8773 },
-  "Colombo 11": { lat: 6.9430, lng: 79.8795 },
-  "Colombo 12": { lat: 6.9560, lng: 79.8845 },
-  "Colombo 13": { lat: 6.9587, lng: 79.8710 },
-  "Colombo 14": { lat: 6.9650, lng: 79.8715 },
-  "Colombo 15": { lat: 6.9730, lng: 79.8670 },
-  Dehiwala: { lat: 6.8402, lng: 79.8655 },
-  "Mount Lavinia": { lat: 6.8400, lng: 79.8650 },
-  Nugegoda: { lat: 6.8723, lng: 79.8893 },
-  Maharagama: { lat: 6.8410, lng: 79.9285 },
-};
 
 const LISTING_COORDS: Record<number, Coordinate> = {
   1: { lat: 6.9067, lng: 79.8680 }, // Colombo 07
@@ -445,40 +399,24 @@ function parseDistanceKm(distance: string): number {
   return Number.isFinite(value) ? value : 0;
 }
 
-function haversineKm(a: Coordinate, b: Coordinate): number {
-  const toRad = (deg: number) => (deg * Math.PI) / 180;
-  const R = 6371; // km
-  const dLat = toRad(b.lat - a.lat);
-  const dLng = toRad(b.lng - a.lng);
-  const lat1 = toRad(a.lat);
-  const lat2 = toRad(b.lat);
-
-  const sinDLat = Math.sin(dLat / 2);
-  const sinDLng = Math.sin(dLng / 2);
-
-  const h = sinDLat * sinDLat + Math.cos(lat1) * Math.cos(lat2) * sinDLng * sinDLng;
-  const c = 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
-  return R * c;
-}
-
 function getReferenceCoordinate(location: LocationState): Coordinate | null {
-  if (location.searchMode === "university" && location.selectedUniversity) {
-    return UNIVERSITY_COORDS[location.selectedUniversity] ?? null;
-  }
-
-  if (location.searchMode === "district" && location.selectedDistrict) {
-    if (location.selectedDistrict === "Colombo" && location.selectedCity) {
-      return COLOMBO_CITY_COORDS[location.selectedCity] ?? null;
-    }
-
-    return DISTRICT_COORDS[location.selectedDistrict] ?? null;
-  }
-
-  return null;
+  return getRefCoord(
+    location.selectedUniversity,
+    location.selectedDistrict,
+    location.selectedCity
+  );
 }
 
-function getListingCoordinate(listing: BoardingListing): Coordinate | null {
-  return LISTING_COORDS[listing.id] ?? null;
+function getListingCoordinate(
+  listing: BoardingListing,
+  dbListings: DbListing[],
+  idMapping: Map<number, string>
+): Coordinate | null {
+  const dbId = idMapping.get(listing.id);
+  if (!dbId) return null;
+  const dbListing = dbListings.find((l) => l.id === dbId);
+  if (!dbListing || dbListing.lat === null || dbListing.lng === null) return null;
+  return { lat: dbListing.lat, lng: dbListing.lng };
 }
 
 function LocationDropdown({
@@ -550,10 +488,41 @@ function LocationDropdown({
   );
 }
 
+function calculateDistances(
+  boardings: BoardingListing[],
+  location: LocationState,
+  dbListings: DbListing[],
+  idMapping: Map<number, string>
+): BoardingListing[] {
+  const reference = getReferenceCoordinate(location);
+  
+  // If no reference location selected, return listings with distance "—"
+  if (!reference) {
+    return boardings.map((listing) => ({ ...listing, distance: "—" }));
+  }
+
+  // Calculate distance for each listing
+  return boardings.map((listing) => {
+    const listingCoord = getListingCoordinate(listing, dbListings, idMapping);
+    if (!listingCoord) {
+      return { ...listing, distance: "—" };
+    }
+    
+    const distanceKm = haversineKm(reference, listingCoord);
+    const distanceText = distanceKm < 1 
+      ? `${(distanceKm * 1000).toFixed(0)} m`
+      : `${distanceKm.toFixed(1)} km`;
+    
+    return { ...listing, distance: distanceText };
+  });
+}
+
 function applyFilters(
   boardings: BoardingListing[],
   filters: FiltersState,
-  location: LocationState
+  location: LocationState,
+  dbListings: DbListing[],
+  idMapping: Map<number, string>
 ): BoardingListing[] {
   const reference = getReferenceCoordinate(location);
 
@@ -605,18 +574,15 @@ function applyFilters(
       return false;
     }
 
-    if (filters.maxDistanceKm !== null) {
-      let distanceValue: number | null = null;
-
-      const listingCoord = getListingCoordinate(listing);
-      if (reference && listingCoord) {
-        distanceValue = haversineKm(reference, listingCoord);
-      } else {
-        distanceValue = parseDistanceKm(listing.distance);
-      }
-
-      if (distanceValue !== null && distanceValue > filters.maxDistanceKm) {
-        return false;
+    // Distance filter only applies when a reference location is selected
+    if (filters.maxDistanceKm !== null && reference) {
+      const listingCoord = getListingCoordinate(listing, dbListings, idMapping);
+      if (listingCoord) {
+        // Calculate distance for filtering (reuses same logic as display calculation)
+        const distanceValue = haversineKm(reference, listingCoord);
+        if (distanceValue > filters.maxDistanceKm) {
+          return false;
+        }
       }
     }
 
@@ -632,106 +598,110 @@ function applyFilters(
 }
 
 export default function BoardingsPage() {
-  const router = useRouter();
   const [filters, setFilters] = useState<FiltersState>(DEFAULT_FILTERS);
   const [location, setLocation] = useState<LocationState>(DEFAULT_LOCATION);
   const [bookmarkIds, setBookmarkIds] = useState<number[]>([]);
   const [listings, setListings] = useState<BoardingListing[]>([]);
+  const [dbListings, setDbListings] = useState<DbListing[]>([]); // Store original DB listings for ID mapping
+  const [idMapping, setIdMapping] = useState<Map<number, string>>(new Map()); // Map numeric ID to DB ID
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const bookmarkSet = useMemo(() => new Set(bookmarkIds), [bookmarkIds]);
-  const [refreshKey, setRefreshKey] = useState(0);
+  // Track if listings have been fetched to prevent unnecessary re-fetches
+  const listingsFetchedRef = useRef(false);
 
-  // Fetch listings from backend
+  // Fetch listings and bookmarks together (only on mount)
   useEffect(() => {
-    async function fetchListings() {
+    // Skip if already fetched (prevents unnecessary re-fetches on re-renders)
+    if (listingsFetchedRef.current) {
+      return;
+    }
+
+    async function fetchAllPageData() {
+      setLoading(true);
       try {
-        setLoading(true);
-        // Add cache-busting query parameter to ensure fresh data
-        const response = await fetch(`${getApiUrl("/listings")}?t=${Date.now()}`, {
-          cache: "no-store",
-          headers: {
-            "Cache-Control": "no-cache",
-          },
-        });
-        if (!response.ok) {
+        // Fetch only active listings from backend (filtered server-side)
+        const listingsResponse = await fetch(getApiUrl("/listings?status=Active"));
+        if (!listingsResponse.ok) {
           throw new Error("Failed to fetch listings");
         }
-        const dbListings: DbListing[] = await response.json();
-        // Filter only Active listings
-        const activeListings = dbListings
-          .filter((l) => l.status === "Active")
-          .map(convertDbListingToBoarding);
-        setListings(activeListings);
+        
+        const dbListingsData: DbListing[] = await listingsResponse.json();
+        
+        // Process listings immediately (already filtered by backend)
+        const activeDbListings: DbListing[] = [];
+        const convertedListings: BoardingListing[] = [];
+        const mapping = new Map<number, string>();
+        
+        // Quick processing loop - use original function for clarity
+        for (const dbListing of dbListingsData) {
+          activeDbListings.push(dbListing);
+          const converted = convertDbListingToBoarding(dbListing);
+          convertedListings.push(converted);
+          mapping.set(converted.id, dbListing.id);
+        }
+        
+        // Show listings immediately
+        setDbListings(activeDbListings);
+        setListings(convertedListings);
+        setIdMapping(mapping);
         setError("");
+        listingsFetchedRef.current = true;
+        setLoading(false);
+        
+        // Fetch bookmarks separately and update when ready (non-blocking)
+        if (isAuthenticated()) {
+          fetchUserBookmarks()
+            .then((dbBookmarkIds: string[]) => {
+              const bookmarkSet = new Set(dbBookmarkIds);
+              const numericBookmarkIds: number[] = [];
+              mapping.forEach((dbId, numericId) => {
+                if (bookmarkSet.has(dbId)) {
+                  numericBookmarkIds.push(numericId);
+                }
+              });
+              setBookmarkIds(numericBookmarkIds);
+            })
+            .catch(() => {
+              // Silent fail - bookmarks just won't show
+            });
+        }
       } catch (err: any) {
         console.error("Error fetching listings:", err);
         setError(err.message || "Failed to load listings");
         setListings([]);
-      } finally {
+        setBookmarkIds([]);
         setLoading(false);
       }
     }
-    fetchListings();
     
-    // Refresh listings when page becomes visible (e.g., when returning from creating/editing a listing)
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === "visible") {
-        fetchListings();
-      }
-    };
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-    
-    // Refresh when page is shown (handles navigation back to page)
-    const handlePageshow = (e: PageTransitionEvent) => {
-      if (e.persisted || document.visibilityState === "visible") {
-        fetchListings();
-      }
-    };
-    window.addEventListener("pageshow", handlePageshow);
-    
-    return () => {
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-      window.removeEventListener("pageshow", handlePageshow);
-    };
-  }, [refreshKey]);
+    fetchAllPageData();
+  }, []); // Only run on mount
   
-  // Force refresh when page is navigated to or focused
+  // Listen for bookmark changes when not authenticated (legacy localStorage)
   useEffect(() => {
-    const handleFocus = () => {
-      setRefreshKey((prev) => prev + 1);
-    };
-    window.addEventListener("focus", handleFocus);
-    
-    // Listen for custom refresh event from other pages
-    const handleRefresh = () => {
-      setRefreshKey((prev) => prev + 1);
-    };
-    window.addEventListener("listings-refresh", handleRefresh);
-    
-    // Refresh on mount to ensure fresh data
-    setRefreshKey((prev) => prev + 1);
-    
-    return () => {
-      window.removeEventListener("focus", handleFocus);
-      window.removeEventListener("listings-refresh", handleRefresh);
-    };
+    if (!isAuthenticated()) {
+      const onStorage = (e: StorageEvent) => {
+        if (e.key === "bookmarks") {
+          setBookmarkIds(getBookmarks());
+        }
+      };
+      window.addEventListener("storage", onStorage);
+      return () => {
+        window.removeEventListener("storage", onStorage);
+      };
+    }
   }, []);
 
-  useEffect(() => {
-    setBookmarkIds(getBookmarks());
-    const onStorage = (e: StorageEvent) => {
-      if (e.key === "bookmarks") {
-        setBookmarkIds(getBookmarks());
-      }
-    };
-    window.addEventListener("storage", onStorage);
-    return () => window.removeEventListener("storage", onStorage);
-  }, []);
+  // Calculate distances when a reference location is selected
+  const listingsWithDistances = useMemo(
+    () => calculateDistances(listings, location, dbListings, idMapping),
+    [listings, location, dbListings, idMapping]
+  );
 
   const filteredListings = useMemo(
-    () => applyFilters(listings, filters, location),
-    [listings, filters, location]
+    () => applyFilters(listingsWithDistances, filters, location, dbListings, idMapping),
+    [listingsWithDistances, filters, location, dbListings, idMapping]
   );
 
   const sortedListings = useMemo(() => {
@@ -895,7 +865,11 @@ export default function BoardingsPage() {
             <FilterBar filters={filters} onChange={setFilters} />
           </div>
 
-          {sortedListings.length === 0 ? (
+          {loading ? (
+            <div className="flex flex-col items-center justify-center rounded-3xl bg-white/80 p-12 text-center">
+              <p className="text-sm font-medium text-slate-600">Loading listings...</p>
+            </div>
+          ) : sortedListings.length === 0 ? (
             <div className="flex flex-col items-center justify-center rounded-3xl bg-white/80 p-10 text-center text-sm text-slate-500 shadow-sm ring-1 ring-gray-100">
               <p className="font-medium text-slate-700">No boardings match your filters.</p>
               <p className="mt-1 max-w-md text-xs text-slate-500">
