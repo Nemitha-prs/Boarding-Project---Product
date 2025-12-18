@@ -3,11 +3,12 @@ import Link from "next/link";
 import { ArrowRight, BookmarkCheck, Eye } from "lucide-react";
 import { useEffect, useState } from "react";
 import { getViews } from "@/utils/views";
+import StarRating from "@/components/StarRating";
 import type { BoardingListing } from "@/lib/fakeData";
 
-type ListingCardProps = BoardingListing & { bookmarked?: boolean };
+type ListingCardProps = BoardingListing & { bookmarked?: boolean; rating?: number; reviewCount?: number };
 
-export default function ListingCard({ id, image, title, description, price, location, roomType, bookmarked, availableBeds }: ListingCardProps) {
+export default function ListingCard({ id, image, title, description, price, location, roomType, bookmarked, availableBeds, rating, reviewCount }: ListingCardProps) {
   const [views, setViews] = useState<number>(0);
 
   useEffect(() => {
@@ -44,6 +45,15 @@ export default function ListingCard({ id, image, title, description, price, loca
           <h3 className="mt-2 text-lg font-bold text-gray-900 line-clamp-1 group-hover:text-brand-accent transition-colors">
             {title}
           </h3>
+
+          {rating !== undefined && rating > 0 && (
+            <div className="mt-2 flex items-center gap-2">
+              <StarRating rating={rating} size="sm" showNumber />
+              {reviewCount !== undefined && reviewCount > 0 && (
+                <span className="text-xs text-slate-500">({reviewCount})</span>
+              )}
+            </div>
+          )}
 
           <p className="mt-2 line-clamp-2 text-sm text-gray-600">{description}</p>
           {roomType === "Shared Room" && typeof availableBeds === "number" && (

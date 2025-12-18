@@ -606,6 +606,7 @@ export default function BoardingsPage() {
   const [idMapping, setIdMapping] = useState<Map<number, string>>(new Map()); // Map numeric ID to DB ID
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [ratings, setRatings] = useState<Map<string, { rating: number; count: number }>>(new Map());
   const bookmarkSet = useMemo(() => new Set(bookmarkIds), [bookmarkIds]);
   // Track if listings have been fetched to prevent unnecessary re-fetches
   const listingsFetchedRef = useRef(false);
@@ -666,6 +667,16 @@ export default function BoardingsPage() {
               // Silent fail - bookmarks just won't show
             });
         }
+
+        // Fetch ratings for all listings (non-blocking)
+        fetchRatingsForListings(activeDbListings.map(l => l.id))
+          .then((ratingsMap) => {
+            setRatings(ratingsMap);
+          })
+          .catch((err) => {
+            console.error("Error fetching ratings:", err);
+            // Silent fail - ratings just won't show
+          });
       } catch (err: any) {
         console.error("Error fetching listings:", err);
         setError(err.message || "Failed to load listings");
@@ -677,6 +688,31 @@ export default function BoardingsPage() {
     
     fetchAllPageData();
   }, []); // Only run on mount
+
+  // Helper function to fetch ratings for multiple listings
+  async function fetchRatingsForListings(listingIds: string[]): Promise<Map<string, { rating: number; count: number }>> {
+    const ratingsMap = new Map<string, { rating: number; count: number }>();
+    
+    // Fetch reviews for all listings in parallel
+    const reviewPromises = listingIds.map(async (listingId) => {
+      try {
+        const response = await fetch(getApiUrl(`/reviews/${listingId}`));
+        if (response.ok) {
+          const reviews = await response.json();
+          if (Array.isArray(reviews) && reviews.length > 0) {
+            const avgRating = reviews.reduce((sum: number, r: any) => sum + r.rating, 0) / reviews.length;
+            ratingsMap.set(listingId, { rating: avgRating, count: reviews.length });
+          }
+        }
+      } catch (err) {
+        // Silent fail for individual listings
+        console.error(`Error fetching reviews for ${listingId}:`, err);
+      }
+    });
+
+    await Promise.all(reviewPromises);
+    return ratingsMap;
+  }
   
   // Listen for bookmark changes when not authenticated (legacy localStorage)
   useEffect(() => {
@@ -878,9 +914,19 @@ export default function BoardingsPage() {
             </div>
           ) : (
             <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-              {sortedListings.map((listing) => (
-                <ListingCard key={listing.id} {...listing} bookmarked={bookmarkSet.has(listing.id)} />
-              ))}
+              {sortedListings.map((listing) => {
+                const dbId = idMapping.get(listing.id);
+                const ratingData = dbId ? ratings.get(dbId) : undefined;
+                return (
+                  <ListingCard 
+                    key={listing.id} 
+                    {...listing} 
+                    bookmarked={bookmarkSet.has(listing.id)}
+                    rating={ratingData?.rating}
+                    reviewCount={ratingData?.count}
+                  />
+                );
+              })}
             </div>
           )}
         </section>

@@ -1,5 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
+import StarRating from "@/components/StarRating";
 import { listings } from "@/lib/fakeData";
 
 export default function FeaturedBoardings() {
@@ -24,7 +25,7 @@ export default function FeaturedBoardings() {
         </div>
 
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          {listings.slice(0, 3).map((card) => (
+          {listings.slice(0, 3).map((card, index) => (
             <article
               key={card.id}
               className="group flex flex-col overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-gray-100 transition-transform transition-shadow hover:-translate-y-1 hover:shadow-lg"
@@ -44,6 +45,10 @@ export default function FeaturedBoardings() {
                 <h3 className="text-lg font-semibold text-[#1F2937] group-hover:text-[#FF7A00]">
                   {card.title}
                 </h3>
+                <div className="flex items-center gap-2">
+                  <StarRating rating={card.rating} size="sm" showNumber />
+                  <span className="text-xs text-slate-500">({Math.floor(Math.random() * 20) + 10} reviews)</span>
+                </div>
                 <p className="flex-1 text-sm text-gray-600">{card.description}</p>
                 <div className="mt-2 flex items-center justify-between pt-2 text-sm font-semibold text-[#1F2937]">
                   <span>{card.price} / mo</span>
