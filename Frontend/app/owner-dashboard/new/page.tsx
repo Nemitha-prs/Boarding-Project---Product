@@ -8,6 +8,7 @@ import Link from "next/link";
 import { fetchWithAuth, isAuthenticated } from "@/lib/auth";
 import { getCurrentUserRole } from "@/lib/jwt";
 import dynamic from "next/dynamic";
+import { readImageFile, handleBackendImageError, getErrorMessage, type ImageUploadError } from "@/utils/imageUpload";
 
 const BoardingLocationMap = dynamic(() => import("@/components/BoardingLocationMap"), {
   ssr: false,
@@ -108,6 +109,7 @@ export default function AddNewListingPage() {
   const [submitted, setSubmitted] = useState<null | FormData>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [imageError, setImageError] = useState<string | null>(null);
   const [form, setForm] = useState<FormData>({
     basic: { name: "", description: "" },
     images: [],
@@ -245,7 +247,16 @@ export default function AddNewListingPage() {
       }, 2000);
     } catch (err: any) {
       console.error("Error saving listing:", err);
-      setError(err.message || "Failed to save listing. Please try again.");
+      
+      // Handle image-related backend errors
+      const backendError = handleBackendImageError(err);
+      const errorMessage = getErrorMessage(backendError);
+      setError(errorMessage);
+      
+      // Log technical details to console only
+      if (backendError.technical) {
+        console.error("Backend error details:", backendError.technical);
+      }
     } finally {
       setLoading(false);
     }
@@ -415,18 +426,32 @@ export default function AddNewListingPage() {
                             type="file"
                             accept="image/*"
                             className="hidden"
-                            onChange={(e) => {
+                            onChange={async (e) => {
                               const file = e.target.files?.[0];
                               if (!file) return;
-                              const reader = new FileReader();
-                              reader.onload = () => {
-                                const url = String(reader.result || "");
+                              
+                              // Clear previous error
+                              setImageError(null);
+                              
+                              try {
+                                const dataUrl = await readImageFile(file);
                                 const next = [...form.images];
-                                next[slot] = url;
+                                next[slot] = dataUrl;
                                 set("images", next.slice(0, 3));
-                              };
-                              reader.readAsDataURL(file);
-                              e.target.value = "";
+                              } catch (err: any) {
+                                // Handle image upload error
+                                const uploadError: ImageUploadError = err;
+                                const errorMessage = getErrorMessage(uploadError);
+                                setImageError(errorMessage);
+                                
+                                // Log technical details to console only
+                                if (uploadError.technical) {
+                                  console.error("Image upload error:", uploadError.technical);
+                                }
+                                
+                                // Reset file input
+                                e.target.value = "";
+                              }
                             }}
                           />
                         </label>
@@ -437,8 +462,10 @@ export default function AddNewListingPage() {
                   <div className="flex items-center justify-between">
                     {showError("images") ? (
                       <span className="text-xs text-red-600">{errors.images}</span>
+                    ) : imageError ? (
+                      <span className="text-xs text-red-600">{imageError}</span>
                     ) : (
-                      <span className="text-xs text-slate-500">Supported: JPG, PNG. Max 3 images.</span>
+                      <span className="text-xs text-slate-500">Supported: JPG, PNG, WebP. Max 5 MB per image. Max 3 images.</span>
                     )}
                   </div>
                 </section>

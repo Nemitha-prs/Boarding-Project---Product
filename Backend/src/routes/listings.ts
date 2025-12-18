@@ -213,7 +213,31 @@ router.post("/", jwtMiddleware, requireOwner, async (req, res) => {
   ];
   for (const key of required) {
     if ((body as any)[key] === undefined || (body as any)[key] === null) {
+      if (key === "images") {
+        return res.status(400).json({ error: "At least one image is required" });
+      }
       return res.status(400).json({ error: `${key} is required` });
+    }
+  }
+
+  // Validate images array
+  if (!Array.isArray(body.images) || body.images.length === 0) {
+    return res.status(400).json({ error: "At least one image is required" });
+  }
+  
+  // Validate image data URLs (basic check)
+  const maxImageSize = 10 * 1024 * 1024; // 10 MB per image (base64 is ~33% larger than original)
+  for (let i = 0; i < body.images.length; i++) {
+    const image = body.images[i];
+    if (typeof image !== "string") {
+      return res.status(400).json({ error: `Image ${i + 1} is invalid. Please upload a valid image file.` });
+    }
+    if (!image.startsWith("data:image/")) {
+      return res.status(400).json({ error: `Image ${i + 1} format is invalid. Please use JPG, PNG, or WebP.` });
+    }
+    // Check approximate size (base64 string length is roughly 4/3 of original size)
+    if (image.length > maxImageSize) {
+      return res.status(400).json({ error: `Image ${i + 1} is too large. Maximum size is 5 MB per image.` });
     }
   }
 
@@ -241,10 +265,20 @@ router.post("/", jwtMiddleware, requireOwner, async (req, res) => {
 
   const { data, error } = await supabase.from("listings").insert(insert).select("*").single();
   if (error) {
+    // Handle Supabase-specific errors
+    const errorMessage = error.message?.toLowerCase() || "";
+    if (errorMessage.includes("storage") || errorMessage.includes("bucket") || errorMessage.includes("supabase")) {
+      console.error("Supabase storage error:", error);
+      return res.status(500).json({ error: "Image upload service error. Please try again in a moment." });
+    }
+    if (errorMessage.includes("size") || errorMessage.includes("large") || errorMessage.includes("limit")) {
+      return res.status(400).json({ error: "Image is too large. Please use images smaller than 5 MB." });
+    }
     // If error mentions pendingApprovals or schema cache, it's likely the column doesn't exist
     // But since we're not including it in insert, this shouldn't happen unless SELECT * tries to get it
     // The error is likely from SELECT * trying to fetch a non-existent column
-    return res.status(500).json({ error: error.message });
+    console.error("Database error:", error);
+    return res.status(500).json({ error: "Failed to save listing. Please try again." });
   }
   // Ensure pendingApprovals exists in response (default to 0 if column doesn't exist)
   if (data && typeof (data as any).pendingApprovals !== "number") {
@@ -284,7 +318,32 @@ router.patch("/:id", jwtMiddleware, requireOwner, async (req, res) => {
   if (body.beds !== undefined) update.beds = body.beds;
   if (body.bathrooms !== undefined) update.bathrooms = Number(body.bathrooms);
   if (body.facilities !== undefined) update.facilities = Array.isArray(body.facilities) ? body.facilities : [];
-  if (body.images !== undefined) update.images = Array.isArray(body.images) ? body.images : [];
+  if (body.images !== undefined) {
+    // Validate images array if provided
+    if (!Array.isArray(body.images)) {
+      return res.status(400).json({ error: "Images must be an array" });
+    }
+    if (body.images.length === 0) {
+      return res.status(400).json({ error: "At least one image is required" });
+    }
+    
+    // Validate image data URLs
+    const maxImageSize = 10 * 1024 * 1024; // 10 MB per image (base64)
+    for (let i = 0; i < body.images.length; i++) {
+      const image = body.images[i];
+      if (typeof image !== "string") {
+        return res.status(400).json({ error: `Image ${i + 1} is invalid. Please upload a valid image file.` });
+      }
+      if (!image.startsWith("data:image/")) {
+        return res.status(400).json({ error: `Image ${i + 1} format is invalid. Please use JPG, PNG, or WebP.` });
+      }
+      if (image.length > maxImageSize) {
+        return res.status(400).json({ error: `Image ${i + 1} is too large. Maximum size is 5 MB per image.` });
+      }
+    }
+    
+    update.images = body.images;
+  }
   if (body.status !== undefined) update.status = body.status as OwnerStatus;
 
   const { data, error } = await supabase
@@ -293,7 +352,19 @@ router.patch("/:id", jwtMiddleware, requireOwner, async (req, res) => {
     .eq("id", id)
     .select("*")
     .single();
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) {
+    // Handle Supabase-specific errors
+    const errorMessage = error.message?.toLowerCase() || "";
+    if (errorMessage.includes("storage") || errorMessage.includes("bucket") || errorMessage.includes("supabase")) {
+      console.error("Supabase storage error:", error);
+      return res.status(500).json({ error: "Image upload service error. Please try again in a moment." });
+    }
+    if (errorMessage.includes("size") || errorMessage.includes("large") || errorMessage.includes("limit")) {
+      return res.status(400).json({ error: "Image is too large. Please use images smaller than 5 MB." });
+    }
+    console.error("Database error:", error);
+    return res.status(500).json({ error: "Failed to update listing. Please try again." });
+  }
   return res.json(data);
 });
 

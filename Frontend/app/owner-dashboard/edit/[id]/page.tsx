@@ -11,6 +11,7 @@ import {
 } from "@/utils/ownerListings";
 import { fetchWithAuth, getApiUrl, isAuthenticated } from "@/lib/auth";
 import { getCurrentUserId, getCurrentUserRole } from "@/lib/jwt";
+import { readImageFile, handleBackendImageError, getErrorMessage, type ImageUploadError } from "@/utils/imageUpload";
 
 const FACILITIES = [
   "CCTV",
@@ -74,6 +75,7 @@ export default function EditOwnerListingPage() {
   const [item, setItem] = useState<OwnerListing | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [imageError, setImageError] = useState<string | null>(null);
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [hasSubmitted, setHasSubmitted] = useState(false);
 
@@ -250,7 +252,17 @@ export default function EditOwnerListingPage() {
       router.push("/owner-dashboard");
     } catch (err: any) {
       console.error("Error updating listing:", err);
-      setError(err.message || "Failed to update listing. Please try again.");
+      
+      // Handle image-related backend errors
+      const backendError = handleBackendImageError(err);
+      const errorMessage = getErrorMessage(backendError);
+      setError(errorMessage);
+      
+      // Log technical details to console only
+      if (backendError.technical) {
+        console.error("Backend error details:", backendError.technical);
+      }
+      
       setLoading(false);
     }
   }
@@ -314,19 +326,33 @@ export default function EditOwnerListingPage() {
                               type="file"
                               accept="image/*"
                               className="hidden"
-                              onChange={(e) => {
+                              onChange={async (e) => {
                                 const file = e.target.files?.[0];
                                 if (!file) return;
-                                const reader = new FileReader();
-                                reader.onload = () => {
-                                  const url = String(reader.result || "");
+                                
+                                // Clear previous error
+                                setImageError(null);
+                                
+                                try {
+                                  const dataUrl = await readImageFile(file);
                                   const base = item.images ?? [];
                                   const next = [...base];
-                                  next[slot] = url;
+                                  next[slot] = dataUrl;
                                   update("images", next.slice(0, 3));
-                                };
-                                reader.readAsDataURL(file);
-                                e.target.value = "";
+                                } catch (err: any) {
+                                  // Handle image upload error
+                                  const uploadError: ImageUploadError = err;
+                                  const errorMessage = getErrorMessage(uploadError);
+                                  setImageError(errorMessage);
+                                  
+                                  // Log technical details to console only
+                                  if (uploadError.technical) {
+                                    console.error("Image upload error:", uploadError.technical);
+                                  }
+                                  
+                                  // Reset file input
+                                  e.target.value = "";
+                                }
                               }}
                             />
                           </label>
@@ -358,26 +384,46 @@ export default function EditOwnerListingPage() {
                         type="file"
                         accept="image/*"
                         className="hidden"
-                        onChange={(e) => {
+                        onChange={async (e) => {
                           const file = e.target.files?.[0];
                           if (!file) return;
-                          const reader = new FileReader();
-                          reader.onload = () => {
-                            const url = String(reader.result || "");
+                          
+                          // Clear previous error
+                          setImageError(null);
+                          
+                          try {
+                            const dataUrl = await readImageFile(file);
                             const base = item.images ?? [];
                             const next = [...base];
-                            next[slot] = url;
+                            next[slot] = dataUrl;
                             update("images", next.slice(0, 3));
-                          };
-                          reader.readAsDataURL(file);
-                          e.target.value = "";
+                          } catch (err: any) {
+                            // Handle image upload error
+                            const uploadError: ImageUploadError = err;
+                            const errorMessage = getErrorMessage(uploadError);
+                            setImageError(errorMessage);
+                            
+                            // Log technical details to console only
+                            if (uploadError.technical) {
+                              console.error("Image upload error:", uploadError.technical);
+                            }
+                            
+                            // Reset file input
+                            e.target.value = "";
+                          }
                         }}
                       />
                     </label>
                   );
                 })}
               </div>
-              {showError("images") && <span className="text-xs text-red-600">{errors.images}</span>}
+              {showError("images") ? (
+                <span className="text-xs text-red-600">{errors.images}</span>
+              ) : imageError ? (
+                <span className="text-xs text-red-600">{imageError}</span>
+              ) : (
+                <span className="text-xs text-slate-500">Supported: JPG, PNG, WebP. Max 5 MB per image. Max 3 images.</span>
+              )}
             </section>
 
             <hr className="my-6 border-slate-100" />
