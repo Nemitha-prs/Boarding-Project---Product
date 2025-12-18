@@ -1,13 +1,13 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { getApiUrl, setToken } from "@/lib/auth";
 import { getCurrentUserRole } from "@/lib/jwt";
 
-export default function VerifyPage() {
+function VerifyForm() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const [email, setEmail] = useState("");
@@ -204,7 +204,7 @@ export default function VerifyPage() {
                     {otp.map((digit, index) => (
                       <input
                         key={index}
-                        ref={(el) => (inputRefs.current[index] = el)}
+                            ref={(el) => { inputRefs.current[index] = el; }}
                         type="text"
                         inputMode="numeric"
                         maxLength={1}
@@ -265,5 +265,23 @@ export default function VerifyPage() {
       </main>
       <Footer />
     </>
+  );
+}
+
+export default function VerifyPage() {
+  return (
+    <Suspense fallback={
+      <>
+        <Navbar />
+        <main className="bg-[#F7F7F7] min-h-screen pt-28 pb-16 flex items-center justify-center">
+          <div className="text-center">
+            <p className="text-sm text-slate-600">Loading...</p>
+          </div>
+        </main>
+        <Footer />
+      </>
+    }>
+      <VerifyForm />
+    </Suspense>
   );
 }

@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import Navbar from "@/components/Navbar";
@@ -7,7 +7,7 @@ import Footer from "@/components/Footer";
 import OtpInput from "@/components/OtpInput";
 import { getApiUrl, setToken } from "@/lib/auth";
 
-export default function SignupPage() {
+function SignupForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -655,5 +655,23 @@ export default function SignupPage() {
       </main>
       <Footer />
     </>
+  );
+}
+
+export default function SignupPage() {
+  return (
+    <Suspense fallback={
+      <>
+        <Navbar />
+        <main className="bg-[#F7F7F7] min-h-screen pt-28 pb-16 flex items-center justify-center">
+          <div className="text-center">
+            <p className="text-sm text-slate-600">Loading...</p>
+          </div>
+        </main>
+        <Footer />
+      </>
+    }>
+      <SignupForm />
+    </Suspense>
   );
 }

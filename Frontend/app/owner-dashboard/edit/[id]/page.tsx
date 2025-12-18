@@ -194,7 +194,7 @@ export default function EditOwnerListingPage() {
           <section className="mx-auto max-w-3xl px-4">
             <div className="rounded-3xl bg-white p-8 shadow ring-1 ring-gray-100">
               <p className="text-lg font-semibold text-slate-900">Listing not found</p>
-              <p className="mt-2 text-sm text-slate-600">{error || "The listing you're looking for doesn't exist or you don't have permission to edit it."}</p>
+              <p className="mt-2 text-sm text-slate-600">{error || "The listing you&apos;re looking for doesn&apos;t exist or you don&apos;t have permission to edit it."}</p>
               <Link
                 href="/owner-dashboard"
                 className="mt-4 inline-flex items-center justify-center rounded-full bg-slate-900 px-6 py-3 text-sm font-semibold text-white shadow-sm transition-transform duration-150 hover:-translate-y-0.5"

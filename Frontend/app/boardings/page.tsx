@@ -939,13 +939,20 @@ export default function BoardingsPage() {
               {sortedListings.map((listing) => {
                 const dbId = idMapping.get(listing.id);
                 const ratingData = dbId ? ratings.get(dbId) : undefined;
+                const cardProps: any = {
+                  ...listing,
+                  bookmarked: bookmarkSet.has(listing.id),
+                };
+                if (ratingData?.rating !== undefined) {
+                  cardProps.rating = ratingData.rating;
+                }
+                if (ratingData?.count !== undefined) {
+                  cardProps.reviewCount = ratingData.count;
+                }
                 return (
                   <ListingCard 
                     key={listing.id} 
-                    {...listing} 
-                    bookmarked={bookmarkSet.has(listing.id)}
-                    rating={ratingData?.rating}
-                    reviewCount={ratingData?.count}
+                    {...cardProps}
                   />
                 );
               })}

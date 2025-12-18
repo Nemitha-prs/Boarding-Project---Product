@@ -3,11 +3,11 @@
 import Link from "next/link";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { getApiUrl, setToken } from "@/lib/auth";
 
-export default function LoginPage() {
+function LoginForm() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const [email, setEmail] = useState("");
@@ -155,5 +155,23 @@ export default function LoginPage() {
       </main>
       <Footer />
     </>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={
+      <>
+        <Navbar />
+        <main className="bg-[#F7F7F7] min-h-screen pt-28 pb-16 flex items-center justify-center">
+          <div className="text-center">
+            <p className="text-sm text-slate-600">Loading...</p>
+          </div>
+        </main>
+        <Footer />
+      </>
+    }>
+      <LoginForm />
+    </Suspense>
   );
 }

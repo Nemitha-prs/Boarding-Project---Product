@@ -106,7 +106,7 @@ export default function OwnerListingPreviewPage() {
           <section className="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8">
             <div className="rounded-3xl bg-white p-8 shadow ring-1 ring-gray-100">
               <p className="text-lg font-semibold text-slate-900">Listing not found</p>
-              <p className="mt-2 text-sm text-slate-600">{error || "The listing you're looking for doesn't exist or you don't have permission to view it."}</p>
+              <p className="mt-2 text-sm text-slate-600">{error || "The listing you&apos;re looking for doesn&apos;t exist or you don&apos;t have permission to view it."}</p>
             </div>
           </section>
         </main>

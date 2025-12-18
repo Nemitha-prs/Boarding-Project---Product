@@ -179,3 +179,4 @@ export function getErrorMessage(error: ImageUploadError): string {
   return error.message;
 }
 
+

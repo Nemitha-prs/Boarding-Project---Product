@@ -39,3 +39,4 @@ Backend/migrations/create_reviews_table.sql
 - If you get permission errors, make sure you're using the service role key in your backend
 - After running the migration, wait a few seconds for Supabase to update its schema cache
 
+
