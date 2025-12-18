@@ -1,9 +1,0 @@
-{
-  "/page": "app/page.js",
-  "/boardings/[id]/page": "app/boardings/[id]/page.js",
-  "/boardings/page": "app/boardings/page.js",
-  "/privacy/page": "app/privacy/page.js",
-  "/terms/page": "app/terms/page.js",
-  "/contact/page": "app/contact/page.js",
-  "/owner-dashboard/page": "app/owner-dashboard/page.js"
-}
