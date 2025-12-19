@@ -2,7 +2,7 @@ import express from "express";
 import cors from "cors";
 import { ENV } from "./env.js";
 
-import authRoutes from "./routes/auth.js";
+import authRoutes from "./routes/auth";
 import listingsRoutes from "./routes/listings.js";
 import bookmarksRoutes from "./routes/bookmarks.js";
 import dbTestRoute from "./routes/dbTest.js";

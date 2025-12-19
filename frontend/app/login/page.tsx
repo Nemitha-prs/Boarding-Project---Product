@@ -1,8 +1,8 @@
-import dynamicImport from "next/dynamic";
+import dynamicComponent from "next/dynamic";
 
 export const dynamic = "force-dynamic";
 
-const LoginClient = dynamicImport(() => import("./LoginClient"), {
+const LoginClient = dynamicComponent(() => import("./LoginClient"), {
   ssr: false,
 });
 
