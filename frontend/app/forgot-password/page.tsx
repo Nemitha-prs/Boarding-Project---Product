@@ -267,7 +267,7 @@ export default function ForgotPasswordPage() {
                         }}
                         placeholder="you@example.com"
                         className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 focus:border-brand-accent focus:bg-white focus:outline-none"
-                        disabled={sending}
+                        disabled={isSendingOtp}
                       />
                     </div>
 
@@ -282,35 +282,65 @@ export default function ForgotPasswordPage() {
                   </>
                 )}
 
-                {/* Step 2: OTP Input */}
+                {/* Step 2: OTP Input - MANDATORY STEP (MUST BE VISIBLE) */}
                 {step === "otp" && (
-                  <>
+                  <div className="space-y-4">
+                    {/* OTP Input Fields - 6 individual inputs */}
                     <div>
                       <label className="block text-sm font-medium text-slate-700 mb-3 text-center">
                         Enter verification code
                       </label>
                       <div className="flex justify-center gap-2">
-                        {otp.map((digit, index) => (
+                        {[0, 1, 2, 3, 4, 5].map((index) => (
                           <input
-                            key={index}
-                            ref={(el) => { inputRefs.current[index] = el; }}
+                            key={`otp-input-${index}`}
+                            ref={(el) => { 
+                              if (el) inputRefs.current[index] = el; 
+                            }}
                             type="text"
                             inputMode="numeric"
+                            pattern="[0-9]*"
                             maxLength={1}
-                            value={digit}
-                            onChange={(e) => handleOtpChange(index, e.target.value)}
+                            value={otp[index] || ""}
+                            onChange={(e) => {
+                              const value = e.target.value;
+                              if (value && !/^\d$/.test(value)) return;
+                              handleOtpChange(index, value);
+                            }}
                             onKeyDown={(e) => handleKeyDown(index, e)}
-                            className="w-12 h-14 text-center text-2xl font-mono font-semibold rounded-xl border-2 border-slate-200 bg-slate-50 text-slate-900 focus:border-brand-accent focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-accent/20 transition-all"
+                            onPaste={(e) => {
+                              try {
+                                e.preventDefault();
+                                const pastedText = e.clipboardData.getData("text");
+                                if (!pastedText) return;
+                                const digits = pastedText.replace(/\D/g, "").slice(0, 6).split("");
+                                const newOtp = ["", "", "", "", "", ""];
+                                digits.forEach((digit, i) => {
+                                  if (i < 6 && /^\d$/.test(digit)) {
+                                    newOtp[i] = digit;
+                                  }
+                                });
+                                setOtp(newOtp);
+                                const lastIndex = digits.length < 6 ? Math.max(0, digits.length - 1) : 5;
+                                setTimeout(() => {
+                                  inputRefs.current[lastIndex]?.focus();
+                                }, 0);
+                              } catch (err) {
+                                console.error("Paste error:", err);
+                              }
+                            }}
+                            className="w-12 h-14 text-center text-2xl font-mono font-semibold rounded-xl border-2 border-slate-200 bg-slate-50 text-slate-900 focus:border-brand-accent focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-accent/20 transition-all disabled:opacity-50"
                             disabled={loading}
+                            autoFocus={index === 0 && otp.every(d => !d)}
                           />
                         ))}
                       </div>
                       <p className="mt-2 text-xs text-center text-slate-500">
-                        Check your email for the 6-digit code
+                        Check your email for the 6-digit code sent to <span className="font-medium">{email}</span>
                       </p>
                     </div>
 
-                    {/* SINGLE resend button - shown only when cooldown active */}
+                    {/* Cooldown indicator */}
                     {otpCooldown > 0 && (
                       <div className="text-center">
                         <p className="text-sm text-slate-500">
@@ -319,6 +349,19 @@ export default function ForgotPasswordPage() {
                       </div>
                     )}
 
+                    {/* Resend OTP button - only when cooldown expired */}
+                    {otpCooldown === 0 && (
+                      <button
+                        type="button"
+                        onClick={handleSendOTP}
+                        disabled={isSendingOtp}
+                        className="w-full text-sm font-semibold text-brand-accent hover:underline disabled:text-slate-400 disabled:no-underline disabled:cursor-not-allowed transition-colors"
+                      >
+                        {isSendingOtp ? "Sending..." : "Resend OTP"}
+                      </button>
+                    )}
+
+                    {/* Verify OTP button */}
                     <button
                       type="button"
                       onClick={handleVerifyOTP}
@@ -327,7 +370,7 @@ export default function ForgotPasswordPage() {
                     >
                       {loading ? "Verifying..." : "Verify OTP"}
                     </button>
-                  </>
+                  </div>
                 )}
 
                 {/* Step 3: Reset Password */}
