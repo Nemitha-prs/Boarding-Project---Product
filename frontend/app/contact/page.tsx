@@ -18,44 +18,9 @@ export default function ContactPage() {
 
           <section className="grid gap-6 md:grid-cols-[3fr,2fr]">
             <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-              <form className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-slate-700">
-                    Name
-                    <input
-                      type="text"
-                      placeholder="Your name"
-                      className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 focus:border-brand-accent focus:bg-white focus:outline-none"
-                    />
-                  </label>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-700">
-                    Email
-                    <input
-                      type="email"
-                      placeholder="you@example.com"
-                      className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 focus:border-brand-accent focus:bg-white focus:outline-none"
-                    />
-                  </label>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-700">
-                    How can we help?
-                    <textarea
-                      rows={4}
-                      placeholder="Tell us what you&apos;re seeing or trying to do."
-                      className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 focus:border-brand-accent focus:bg-white focus:outline-none"
-                    />
-                  </label>
-                </div>
-                <button
-                  type="submit"
-                  className="w-full rounded-full bg-slate-900 px-6 py-3 text-sm font-semibold text-white transition hover:-translate-y-0.5"
-                >
-                  Send message
-                </button>
-              </form>
+              <p className="text-sm text-slate-600">
+                For inquiries, please use the contact information provided in the sidebar or reach out directly via email or phone.
+              </p>
             </div>
 
             <aside className="space-y-4 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm text-sm text-slate-600">
