@@ -15,13 +15,25 @@ const DEFAULT_ZOOM = 15; // Higher zoom for single location
 
 function SingleBoardingMapContent({ lat, lng, title }: SingleBoardingMapProps) {
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "";
+  const [isClient, setIsClient] = useState(false);
+
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
 
   const { isLoaded, loadError } = useJsApiLoader({
     googleMapsApiKey: apiKey || "dummy-key",
   });
 
   const mapCenter = useMemo(() => {
-    if (lat !== null && lng !== null) {
+    if (
+      typeof lat === "number" && 
+      typeof lng === "number" && 
+      !isNaN(lat) && 
+      !isNaN(lng) &&
+      lat !== null && 
+      lng !== null
+    ) {
       return { lat, lng };
     }
     return DEFAULT_CENTER;
@@ -43,7 +55,7 @@ function SingleBoardingMapContent({ lat, lng, title }: SingleBoardingMapProps) {
     );
   }
 
-  if (!isLoaded) {
+  if (!isClient || !isLoaded) {
     return (
       <div className="flex h-56 w-full items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 text-sm text-slate-500">
         Loading map...
@@ -51,7 +63,24 @@ function SingleBoardingMapContent({ lat, lng, title }: SingleBoardingMapProps) {
     );
   }
 
-  if (lat === null || lng === null) {
+  // Safety check for Google Maps API
+  if (typeof window === "undefined" || !window.google) {
+    return (
+      <div className="flex h-56 w-full items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 text-sm text-slate-500">
+        Loading map...
+      </div>
+    );
+  }
+
+  const hasValidCoords = 
+    typeof lat === "number" && 
+    typeof lng === "number" && 
+    !isNaN(lat) && 
+    !isNaN(lng) &&
+    lat !== null && 
+    lng !== null;
+
+  if (!hasValidCoords) {
     return (
       <div className="flex h-56 w-full items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 text-sm text-slate-500">
         Location not available
@@ -71,7 +100,7 @@ function SingleBoardingMapContent({ lat, lng, title }: SingleBoardingMapProps) {
           fullscreenControl: false,
         }}
       >
-        <Marker position={{ lat, lng }} title={title} />
+        <Marker position={{ lat: lat!, lng: lng! }} title={title || "Boarding location"} />
       </GoogleMap>
     </div>
   );

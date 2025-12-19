@@ -10,27 +10,58 @@ type ListingCardProps = BoardingListing & { bookmarked?: boolean; rating?: numbe
 
 export default function ListingCard({ id, image, title, description, price, location, roomType, bookmarked, availableBeds, rating, reviewCount }: ListingCardProps) {
   const [views, setViews] = useState<number>(0);
+  const [isClient, setIsClient] = useState(false);
 
   useEffect(() => {
-    setViews(getViews(id));
-    const onStorage = (e: StorageEvent) => {
-      if (e.key === "listingViews") {
+    setIsClient(true);
+    if (id) {
+      try {
         setViews(getViews(id));
+      } catch (err) {
+        console.error("Error getting views:", err);
+      }
+    }
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === "listingViews" && id) {
+        try {
+          setViews(getViews(id));
+        } catch (err) {
+          console.error("Error getting views from storage:", err);
+        }
       }
     };
-    window.addEventListener("storage", onStorage);
-    return () => window.removeEventListener("storage", onStorage);
+    if (typeof window !== "undefined") {
+      window.addEventListener("storage", onStorage);
+      return () => window.removeEventListener("storage", onStorage);
+    }
   }, [id]);
+
+  // Guard against invalid IDs
+  if (!id || (typeof id !== "number" && typeof id !== "string")) {
+    return null;
+  }
+
+  const safeId = typeof id === "number" ? id : parseInt(String(id), 10);
+  if (isNaN(safeId)) {
+    return null;
+  }
+
   return (
-    <Link href={`/boardings/${id}`} className="group block h-full">
+    <Link href={`/boardings/${safeId}`} className="group block h-full">
       <div className="relative h-full overflow-hidden rounded-2xl bg-white shadow-lg transition-all duration-200 hover:scale-[1.02] hover:shadow-2xl">
         <div className="relative h-56 w-full overflow-hidden">
           <Image
-            src={image}
-            alt={title}
+            src={image || "/images/board1.jpg"}
+            alt={title || "Boarding listing"}
             fill
             sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
             className="object-cover transition-transform duration-500 group-hover:scale-110"
+            onError={(e) => {
+              const target = e.target as HTMLImageElement;
+              if (target.src !== "/images/board1.jpg") {
+                target.src = "/images/board1.jpg";
+              }
+            }}
           />
           {bookmarked && (
             <span className="absolute left-3 top-3 inline-flex items-center gap-1 rounded-full bg-white/95 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-800 shadow">
@@ -40,41 +71,41 @@ export default function ListingCard({ id, image, title, description, price, loca
           )}
         </div>
         <div className="p-5">
-          <p className="text-xs font-medium uppercase tracking-[0.25em] text-slate-500">{location}</p>
+          <p className="text-xs font-medium uppercase tracking-[0.25em] text-slate-500">{location || "Location not available"}</p>
 
           <h3 className="mt-2 text-lg font-bold text-gray-900 line-clamp-1 group-hover:text-brand-accent transition-colors">
-            {title}
+            {title || "Untitled Listing"}
           </h3>
 
-          {rating !== undefined && rating > 0 && (
+          {rating !== undefined && typeof rating === "number" && rating > 0 && (
             <div className="mt-2 flex items-center gap-2">
               <StarRating rating={rating} size="sm" showNumber />
-              {reviewCount !== undefined && reviewCount > 0 && (
+              {reviewCount !== undefined && typeof reviewCount === "number" && reviewCount > 0 && (
                 <span className="text-xs text-slate-500">({reviewCount})</span>
               )}
             </div>
           )}
 
-          <p className="mt-2 line-clamp-2 text-sm text-gray-600">{description}</p>
-          {roomType === "Shared Room" && typeof availableBeds === "number" && (
+          <p className="mt-2 line-clamp-2 text-sm text-gray-600">{description || "No description available"}</p>
+          {roomType === "Shared Room" && typeof availableBeds === "number" && availableBeds > 0 && (
             <p className="mt-2 text-xs font-medium text-brand-primary">Available beds: {availableBeds}</p>
           )}
 
           <div className="mt-5 flex flex-col gap-2 border-t border-gray-100 pt-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="text-xs text-gray-500">Monthly rent</p>
-              <p className="text-xl font-bold text-brand-primary">{price}</p>
+              <p className="text-xl font-bold text-brand-primary">{price || "Price not available"}</p>
             </div>
             <div className="flex items-center gap-3">
               <span className="hidden sm:inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-1 text-[10px] font-semibold text-slate-700">
-                <Eye className="h-3 w-3" /> {views}
+                <Eye className="h-3 w-3" /> {isClient ? views : 0}
               </span>
               <div className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-background text-brand-primary transition-colors group-hover:bg-brand-accent group-hover:text-white">
                 <ArrowRight size={16} />
               </div>
             </div>
             <span className="inline-flex sm:hidden items-center gap-1 rounded-full bg-slate-100 px-2 py-1 text-[10px] font-semibold text-slate-700">
-              <Eye className="h-3 w-3" /> {views}
+              <Eye className="h-3 w-3" /> {isClient ? views : 0}
             </span>
           </div>
         </div>

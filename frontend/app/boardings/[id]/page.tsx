@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import dynamic from "next/dynamic";
 
 const SingleBoardingMap = dynamic(() => import("@/components/SingleBoardingMap"), {
@@ -207,7 +208,19 @@ export default function BoardingDetailsPage({ params }: BoardingDetailsPageProps
     : [];
 
   return (
-    <>
+    <ErrorBoundary
+      fallback={
+        <div className="flex flex-col items-center justify-center min-h-screen p-8">
+          <p className="text-sm font-medium text-red-700 mb-2">Something went wrong</p>
+          <Link
+            href="/boardings"
+            className="mt-4 inline-flex items-center justify-center rounded-full bg-red-600 px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-red-700"
+          >
+            Back to Listings
+          </Link>
+        </div>
+      }
+    >
       <Navbar />
       <main className="bg-[#F7F7F8] min-h-screen pt-28 pb-16 opacity-0 animate-[fadeIn_0.8s_ease-out_forwards]">
         <section className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8">
@@ -253,10 +266,10 @@ export default function BoardingDetailsPage({ params }: BoardingDetailsPageProps
                         Listing #{listing.id}
                       </p>
                       <h2 className="mt-2 text-2xl font-semibold text-[#1F2937] sm:text-3xl">
-                        {listing.title}
+                        {listing.title || "Untitled Listing"}
                       </h2>
                       <p className="mt-1 text-sm text-slate-600">
-                        {listing.roomType}
+                        {listing.roomType || "Room type not specified"}
                         {distanceInfo.distance && distanceInfo.locationName && (
                           <> · {distanceInfo.distance} to {distanceInfo.locationName}</>
                         )}
@@ -273,15 +286,19 @@ export default function BoardingDetailsPage({ params }: BoardingDetailsPageProps
                 <section className="rounded-2xl border border-gray-100 bg-slate-50/80 p-5">
                   <h3 className="text-base font-semibold text-slate-900">Facilities</h3>
                   <ul className="mt-4 grid gap-2 sm:grid-cols-2">
-                    {listing.facilities.map((facility) => (
-                      <li
-                        key={facility}
-                        className="flex items-center gap-2 rounded-full bg-white px-3 py-2 text-sm text-slate-600 shadow-sm"
-                      >
-                        <span className="h-2 w-2 rounded-full bg-brand-accent" />
-                        {facility}
-                      </li>
-                    ))}
+                    {Array.isArray(listing.facilities) && listing.facilities.length > 0 ? (
+                      listing.facilities.map((facility, idx) => (
+                        <li
+                          key={facility || idx}
+                          className="flex items-center gap-2 rounded-full bg-white px-3 py-2 text-sm text-slate-600 shadow-sm"
+                        >
+                          <span className="h-2 w-2 rounded-full bg-brand-accent" />
+                          {facility || "Facility"}
+                        </li>
+                      ))
+                    ) : (
+                      <li className="text-sm text-slate-500">No facilities listed</li>
+                    )}
                   </ul>
                 </section>
               </div>
@@ -340,12 +357,18 @@ export default function BoardingDetailsPage({ params }: BoardingDetailsPageProps
                   )}
                 </section>
 
-                {dbListing && dbListing.lat !== null && dbListing.lng !== null && (
+                {dbListing && 
+                 typeof dbListing.lat === "number" && 
+                 typeof dbListing.lng === "number" && 
+                 !isNaN(dbListing.lat) && 
+                 !isNaN(dbListing.lng) &&
+                 dbListing.lat !== null && 
+                 dbListing.lng !== null && (
                   <section className="rounded-2xl border border-dashed border-brand-accent/30 bg-white p-4">
                     <SingleBoardingMap
                       lat={dbListing.lat}
                       lng={dbListing.lng}
-                      title={listing.title}
+                      title={listing.title || "Boarding location"}
                     />
                   </section>
                 )}
@@ -368,6 +391,6 @@ export default function BoardingDetailsPage({ params }: BoardingDetailsPageProps
         </section>
       </main>
       <Footer />
-    </>
+    </ErrorBoundary>
   );
 }
