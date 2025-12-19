@@ -1,6 +1,7 @@
 import express from "express";
 import cors from "cors";
 import { ENV } from "./env.js";
+import { supabase } from "./supabase.js";
 
 import authRoutes from "./routes/auth.js";
 import listingsRoutes from "./routes/listings.js";
@@ -28,6 +29,27 @@ app.get("/", (_req, res) => res.json({ ok: true, message: "Backend API is runnin
 
 // Health check
 app.get("/health", (_req, res) => res.json({ ok: true }));
+
+// Database test endpoint
+app.get("/db-test", async (req, res) => {
+  const { data, error } = await supabase
+    .from("users")
+    .select("id")
+    .limit(1);
+
+  if (error) {
+    console.error("DB TEST ERROR:", error);
+    return res.status(500).json({
+      ok: false,
+      error: error.message,
+    });
+  }
+
+  return res.json({
+    ok: true,
+    data,
+  });
+});
 
 // Mount routes
 app.use("/auth", authRoutes);
