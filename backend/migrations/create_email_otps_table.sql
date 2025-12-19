@@ -17,6 +17,3 @@ CREATE TABLE IF NOT EXISTS email_otps (
 CREATE INDEX IF NOT EXISTS idx_email_otps_email_purpose ON email_otps(email, purpose);
 CREATE INDEX IF NOT EXISTS idx_email_otps_expires_at ON email_otps(expires_at);
 
--- Add comment
-COMMENT ON TABLE email_otps IS 'Stores OTP codes for email verification and password reset. Replaces in-memory storage for production reliability.';
-
