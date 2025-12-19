@@ -38,7 +38,7 @@ function SignupForm() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  // OTP Timer - 5 minutes (300 seconds)
+  // OTP Timer - 2 minutes (120 seconds) cooldown
   useEffect(() => {
     if (otpCountdown > 0) {
       const timer = setTimeout(() => {
@@ -276,12 +276,19 @@ function SignupForm() {
           setEmailExists(true);
           return;
         }
+        if (res.status === 429) {
+          // Cooldown enforced by backend
+          const cooldownSeconds = data.cooldownSeconds || 120;
+          setOtpCountdown(cooldownSeconds);
+          setError(data.error || "Please wait before requesting another OTP");
+          return;
+        }
         throw new Error(data.error || "Failed to send OTP");
       }
 
       // CRITICAL: Set otpSent to true IMMEDIATELY after successful API call
       setOtpSent(true);
-      setOtpCountdown(300);
+      setOtpCountdown(120); // 2 minutes cooldown
       setOtp(["", "", "", "", "", ""]);
       setError("");
     } catch (err: any) {
@@ -335,9 +342,12 @@ function SignupForm() {
     }
   };
 
-  // Resend OTP
+  // Resend OTP - only if cooldown has expired
   const handleResendOtp = async () => {
-    setOtpCountdown(0);
+    if (otpCountdown > 0) {
+      setError(`Please wait ${Math.ceil(otpCountdown / 60)} minute(s) before resending`);
+      return;
+    }
     setOtp(["", "", "", "", "", ""]);
     setError("");
     await handleSendOtp();
@@ -346,6 +356,11 @@ function SignupForm() {
   // Final registration submit
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Prevent double submission
+    if (loading) {
+      return;
+    }
 
     if (!otpVerified) {
       setError("Please verify your email with OTP before completing registration.");
@@ -548,7 +563,7 @@ function SignupForm() {
                     <button
                       type="button"
                       onClick={(e) => handleSendOtp(e)}
-                      disabled={!emailIsValid(email) || otpSending || otpVerified || !name.trim() || emailExists || checkingEmail}
+                      disabled={!emailIsValid(email) || otpSending || otpVerified || !name.trim() || emailExists || checkingEmail || otpCountdown > 0}
                       className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60 whitespace-nowrap min-w-[100px]"
                     >
                       {otpSending ? "Sending..." : otpVerified ? "✓ Verified" : "Send OTP"}

@@ -1013,6 +1013,9 @@ export default function BoardingsPage() {
               <p className="mt-1 max-w-md text-xs text-red-500">{error}</p>
               <button
                 onClick={() => {
+                  // Prevent double-click
+                  if (loading) return;
+                  
                   listingsFetchedRef.current = false;
                   setError("");
                   setLoading(true);
@@ -1021,9 +1024,10 @@ export default function BoardingsPage() {
                   // Trigger re-fetch
                   setRetryTrigger(prev => prev + 1);
                 }}
-                className="mt-4 inline-flex items-center justify-center rounded-full bg-red-600 px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-red-700"
+                disabled={loading}
+                className="mt-4 inline-flex items-center justify-center rounded-full bg-red-600 px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                Retry
+                {loading ? "Retrying..." : "Retry"}
               </button>
             </div>
           ) : listings.length === 0 ? (

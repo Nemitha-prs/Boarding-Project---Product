@@ -91,13 +91,21 @@ export default function ForgotPasswordPage() {
 
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
+        if (res.status === 429) {
+          // Cooldown enforced by backend
+          const cooldownSeconds = data.cooldownSeconds || 120;
+          setCountdown(cooldownSeconds);
+          setIsTimerActive(true);
+          setError(data.error || "Please wait before requesting another OTP");
+          return;
+        }
         throw new Error(data.error || "Failed to send OTP");
       }
 
       setSuccess("OTP sent to your email");
       setStep("otp");
       setIsTimerActive(true);
-      setCountdown(600); // 10 minutes
+      setCountdown(120); // 2 minutes cooldown
       setOtp(["", "", "", "", "", ""]);
       inputRefs.current[0]?.focus();
     } catch (err: any) {
@@ -145,6 +153,11 @@ export default function ForgotPasswordPage() {
   };
 
   const handleResetPassword = async () => {
+    // Prevent double submission
+    if (loading) {
+      return;
+    }
+    
     if (newPassword.trim().length < 6) {
       setError("Password must be at least 6 characters");
       return;
@@ -231,10 +244,10 @@ export default function ForgotPasswordPage() {
                     <button
                       type="button"
                       onClick={handleSendOTP}
-                      disabled={!emailIsValid(email) || sending}
+                      disabled={!emailIsValid(email) || sending || (isTimerActive && countdown > 0)}
                       className="w-full rounded-full bg-slate-900 px-6 py-3 text-sm font-semibold text-white transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-60"
                     >
-                      {sending ? "Sending..." : "Send OTP"}
+                      {sending ? "Sending..." : isTimerActive && countdown > 0 ? `Resend in ${formatTime(countdown)}` : "Send OTP"}
                     </button>
                   </>
                 )}
@@ -267,11 +280,17 @@ export default function ForgotPasswordPage() {
                     <div className="flex items-center justify-between">
                       <button
                         type="button"
-                        onClick={handleSendOTP}
-                        disabled={sending || isTimerActive}
+                        onClick={() => {
+                          if (countdown > 0) {
+                            setError(`Please wait ${Math.ceil(countdown / 60)} minute(s) before resending`);
+                            return;
+                          }
+                          handleSendOTP();
+                        }}
+                        disabled={sending || (isTimerActive && countdown > 0)}
                         className="text-sm font-semibold text-brand-accent hover:underline disabled:text-slate-400 disabled:no-underline disabled:cursor-not-allowed transition-colors"
                       >
-                        {sending ? "Sending..." : isTimerActive ? `Resend in ${formatTime(countdown)}` : "Resend code"}
+                        {sending ? "Sending..." : isTimerActive && countdown > 0 ? `Resend in ${formatTime(countdown)}` : "Resend code"}
                       </button>
                       {isTimerActive && (
                         <span className="text-sm text-slate-500 font-mono">

@@ -56,6 +56,12 @@ function LoginForm() {
                 className="mt-6 space-y-4"
                 onSubmit={async (e) => {
                   e.preventDefault();
+                  
+                  // Prevent double submission
+                  if (loading) {
+                    return;
+                  }
+                  
                   setTouched(true);
                   if (!formValid) return;
                   setLoading(true);

@@ -329,6 +329,12 @@ export default function AddNewListingPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    
+    // Prevent double submission
+    if (loading) {
+      return;
+    }
+    
     setHasSubmitted(true);
     if (!canSubmit) return;
     

@@ -14,11 +14,15 @@ interface OTPStoreEntry {
   expiresAt: number;
   attempts: number;
   verified: boolean;
+  lastRequestTime?: number; // Track when OTP was last requested
 }
 
 const otpStore = new Map<string, OTPStoreEntry>();
 // Separate OTP store for password reset
 const passwordResetOtpStore = new Map<string, OTPStoreEntry>();
+
+// OTP cooldown: 2 minutes (120 seconds) in milliseconds
+const OTP_COOLDOWN_MS = 2 * 60 * 1000;
 
 // Generate 6-digit OTP
 function generateOTP(): string {
@@ -76,15 +80,30 @@ router.post("/send-email-otp", async (req, res) => {
       return res.status(409).json({ error: "Email already registered" });
     }
 
+    // Check cooldown: enforce 2-minute cooldown between OTP requests
+    const existingEntry = otpStore.get(email);
+    if (existingEntry?.lastRequestTime) {
+      const timeSinceLastRequest = Date.now() - existingEntry.lastRequestTime;
+      if (timeSinceLastRequest < OTP_COOLDOWN_MS) {
+        const remainingSeconds = Math.ceil((OTP_COOLDOWN_MS - timeSinceLastRequest) / 1000);
+        return res.status(429).json({ 
+          error: "Please wait before requesting another OTP",
+          cooldownSeconds: remainingSeconds
+        });
+      }
+    }
+
     // Generate OTP and store in memory
     const otp = generateOTP();
     const expiresAt = Date.now() + 5 * 60 * 1000; // 5 minutes
+    const now = Date.now();
 
     otpStore.set(email, {
       otp,
       expiresAt,
       attempts: 0,
       verified: false,
+      lastRequestTime: now,
     });
 
     // Send email
@@ -333,15 +352,30 @@ router.post("/forgot-password/send-otp", async (req, res) => {
       return res.status(404).json({ error: "Email is not registered" });
     }
 
+    // Check cooldown: enforce 2-minute cooldown between OTP requests
+    const existingEntry = passwordResetOtpStore.get(email);
+    if (existingEntry?.lastRequestTime) {
+      const timeSinceLastRequest = Date.now() - existingEntry.lastRequestTime;
+      if (timeSinceLastRequest < OTP_COOLDOWN_MS) {
+        const remainingSeconds = Math.ceil((OTP_COOLDOWN_MS - timeSinceLastRequest) / 1000);
+        return res.status(429).json({ 
+          error: "Please wait before requesting another OTP",
+          cooldownSeconds: remainingSeconds
+        });
+      }
+    }
+
     // Email exists - generate and send OTP
     const otp = generateOTP();
     const expiresAt = Date.now() + 10 * 60 * 1000; // 10 minutes
+    const now = Date.now();
 
     passwordResetOtpStore.set(email, {
       otp,
       expiresAt,
       attempts: 0,
       verified: false,
+      lastRequestTime: now,
     });
 
     // Send email
