@@ -975,6 +975,18 @@ export default function BoardingsPage() {
                 </div>
               ))}
             </div>
+          ) : error ? (
+            <div className="flex flex-col items-center justify-center rounded-3xl bg-white/80 p-10 text-center text-sm text-red-500 shadow-sm ring-1 ring-gray-100">
+              <p className="font-medium text-red-700">Error loading boardings</p>
+              <p className="mt-1 max-w-md text-xs text-red-500">{error}</p>
+            </div>
+          ) : listings.length === 0 ? (
+            <div className="flex flex-col items-center justify-center rounded-3xl bg-white/80 p-10 text-center text-sm text-slate-500 shadow-sm ring-1 ring-gray-100">
+              <p className="font-medium text-slate-700">No boardings available.</p>
+              <p className="mt-1 max-w-md text-xs text-slate-500">
+                There are currently no active boardings in the system.
+              </p>
+            </div>
           ) : sortedListings.length === 0 ? (
             <div className="flex flex-col items-center justify-center rounded-3xl bg-white/80 p-10 text-center text-sm text-slate-500 shadow-sm ring-1 ring-gray-100">
               <p className="font-medium text-slate-700">No boardings match your filters.</p>
