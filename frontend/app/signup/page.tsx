@@ -282,8 +282,10 @@ function SignupForm() {
         body: JSON.stringify({ email, name }),
       });
 
+      // Parse response
+      const data = await res.json().catch(() => ({}));
+
       if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
         if (res.status === 409) {
           setError("Email already registered. Please log in.");
           setEmailExists(true);
@@ -292,23 +294,25 @@ function SignupForm() {
           return;
         }
         if (res.status === 429) {
-          // Cooldown enforced by backend
+          // Cooldown enforced by backend - use exact remaining time
           const cooldownSeconds = data.cooldownSeconds || 120;
           setOtpCountdown(cooldownSeconds);
-          setError(data.error || "Please wait before requesting another OTP");
+          setError(data.message || data.error || "Please wait before requesting another OTP");
           setOtpSending(false);
           otpRequestInFlight.current = false;
           return;
         }
-        throw new Error(data.error || "Failed to send OTP");
+        throw new Error(data.error || data.message || "Failed to send OTP");
       }
 
-      // CRITICAL: Only update state AFTER backend confirms success
-      const data = await res.json().catch(() => ({}));
+      // CRITICAL: Only update state AFTER backend confirms success with success: true
+      if (data.success !== true) {
+        throw new Error(data.error || data.message || "Failed to send OTP");
+      }
       
-      // Backend confirmed OTP was sent - now update UI state
+      // Backend confirmed OTP was sent successfully - now update UI state
       setOtpSent(true);
-      setOtpCountdown(120); // 2 minutes cooldown
+      setOtpCountdown(data.cooldownSeconds || 120); // Use backend-provided cooldown
       setOtp(["", "", "", "", "", ""]);
       setError("");
       setOtpSending(false);

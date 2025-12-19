@@ -102,28 +102,33 @@ export default function ForgotPasswordPage() {
         body: JSON.stringify({ email }),
       });
 
+      // Parse response
+      const data = await res.json().catch(() => ({}));
+
       if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
         if (res.status === 429) {
-          // Cooldown enforced by backend
+          // Cooldown enforced by backend - use exact remaining time
           const cooldownSeconds = data.cooldownSeconds || 120;
           setCountdown(cooldownSeconds);
           setIsTimerActive(true);
-          setError(data.error || "Please wait before requesting another OTP");
+          setError(data.message || data.error || "Please wait before requesting another OTP");
           setSending(false);
           otpRequestInFlight.current = false;
           return;
         }
-        throw new Error(data.error || "Failed to send OTP");
+        throw new Error(data.error || data.message || "Failed to send OTP");
       }
 
-      // Backend confirmed OTP was sent - now update UI state
-      const data = await res.json().catch(() => ({}));
-      
+      // CRITICAL: Only update state AFTER backend confirms success with success: true
+      if (data.success !== true) {
+        throw new Error(data.error || data.message || "Failed to send OTP");
+      }
+
+      // Backend confirmed OTP was sent successfully - now update UI state
       setSuccess("OTP sent to your email");
       setStep("otp");
       setIsTimerActive(true);
-      setCountdown(120); // 2 minutes cooldown
+      setCountdown(data.cooldownSeconds || 120); // Use backend-provided cooldown
       setOtp(["", "", "", "", "", ""]);
       inputRefs.current[0]?.focus();
       setSending(false);
@@ -154,15 +159,26 @@ export default function ForgotPasswordPage() {
         body: JSON.stringify({ email, otp: otpString }),
       });
 
+      // Parse response
+      const data = await res.json().catch(() => ({}));
+
       if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.error || "Invalid OTP");
+        const errorMessage = data.error || "Invalid OTP";
+        setError(errorMessage);
+        setOtp(["", "", "", "", "", ""]);
+        inputRefs.current[0]?.focus();
+        return;
       }
 
-      setSuccess("OTP verified successfully");
-      setStep("reset");
-      setNewPassword("");
-      setConfirmPassword("");
+      // Check for explicit success
+      if (data.success === true && data.verified === true) {
+        setSuccess("OTP verified successfully");
+        setStep("reset");
+        setNewPassword("");
+        setConfirmPassword("");
+      } else {
+        setError(data.error || "Verification failed");
+      }
     } catch (err: any) {
       setError(err.message || "Verification failed");
       setOtp(["", "", "", "", "", ""]);
