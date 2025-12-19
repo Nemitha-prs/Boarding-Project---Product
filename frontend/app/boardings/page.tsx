@@ -633,11 +633,12 @@ export default function BoardingsPage() {
   const bookmarkSet = useMemo(() => new Set(bookmarkIds), [bookmarkIds]);
   // Track if listings have been fetched to prevent unnecessary re-fetches
   const listingsFetchedRef = useRef(false);
+  const [retryTrigger, setRetryTrigger] = useState(0);
 
-  // Fetch listings and bookmarks in parallel (only on mount)
+  // Fetch listings and bookmarks in parallel (only on mount or retry)
   useEffect(() => {
     // Skip if already fetched (prevents unnecessary re-fetches on re-renders)
-    if (listingsFetchedRef.current) {
+    if (listingsFetchedRef.current && retryTrigger === 0) {
       return;
     }
 
@@ -653,12 +654,36 @@ export default function BoardingsPage() {
           dbListingsData = cached;
         } else {
           // Fetch only active listings from backend (filtered server-side)
-          const listingsResponse = await fetch(getApiUrl(cacheKey));
-          if (!listingsResponse.ok) {
-            throw new Error("Failed to fetch listings");
+          const apiUrl = getApiUrl(cacheKey);
+          let listingsResponse: Response;
+          
+          try {
+            listingsResponse = await fetch(apiUrl);
+          } catch (networkError: any) {
+            // Network error (CORS, connection refused, etc.)
+            console.error("Network error fetching listings:", networkError);
+            throw new Error(`Unable to connect to backend. Please check if the API is running at ${apiUrl}`);
           }
           
-          dbListingsData = await listingsResponse.json();
+          if (!listingsResponse.ok) {
+            const errorText = await listingsResponse.text().catch(() => "Unknown error");
+            let errorMessage = `Backend returned ${listingsResponse.status}`;
+            try {
+              const errorJson = JSON.parse(errorText);
+              errorMessage = errorJson.error || errorMessage;
+            } catch {
+              errorMessage = errorText || errorMessage;
+            }
+            throw new Error(errorMessage);
+          }
+          
+          try {
+            dbListingsData = await listingsResponse.json();
+          } catch (parseError: any) {
+            console.error("Error parsing listings response:", parseError);
+            throw new Error("Invalid response from backend. Expected JSON data.");
+          }
+          
           // Cache for 60 seconds
           apiCache.set(cacheKey, dbListingsData, 60000);
         }
@@ -725,15 +750,19 @@ export default function BoardingsPage() {
         });
       } catch (err: any) {
         console.error("Error fetching listings:", err);
-        setError(err.message || "Failed to load listings");
+        const errorMessage = err.message || "Failed to load listings";
+        setError(errorMessage);
         setListings([]);
         setBookmarkIds([]);
+        setDbListings([]);
+        setIdMapping(new Map());
         setLoading(false);
+        listingsFetchedRef.current = false; // Allow retry
       }
     }
     
     fetchAllPageData();
-  }, []); // Only run on mount
+  }, [retryTrigger]); // Run on mount or when retry is triggered
 
   // Helper function to fetch ratings for multiple listings
   async function fetchRatingsForListings(listingIds: string[]): Promise<Map<string, { rating: number; count: number }>> {
@@ -979,6 +1008,20 @@ export default function BoardingsPage() {
             <div className="flex flex-col items-center justify-center rounded-3xl bg-white/80 p-10 text-center text-sm text-red-500 shadow-sm ring-1 ring-gray-100">
               <p className="font-medium text-red-700">Error loading boardings</p>
               <p className="mt-1 max-w-md text-xs text-red-500">{error}</p>
+              <button
+                onClick={() => {
+                  listingsFetchedRef.current = false;
+                  setError("");
+                  setLoading(true);
+                  // Clear cache for this endpoint to force fresh fetch
+                  apiCache.delete("/listings?status=Active");
+                  // Trigger re-fetch
+                  setRetryTrigger(prev => prev + 1);
+                }}
+                className="mt-4 inline-flex items-center justify-center rounded-full bg-red-600 px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-red-700"
+              >
+                Retry
+              </button>
             </div>
           ) : listings.length === 0 ? (
             <div className="flex flex-col items-center justify-center rounded-3xl bg-white/80 p-10 text-center text-sm text-slate-500 shadow-sm ring-1 ring-gray-100">
