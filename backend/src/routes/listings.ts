@@ -10,9 +10,10 @@ router.get("/", async (req, res) => {
   const ownerId = req.query.ownerId as string | undefined;
   const status = req.query.status as string | undefined;
   
+  // Only select required fields to reduce payload size
   let query = supabase
     .from("listings")
-    .select("*")
+    .select("id, title, description, price, negotiable, boardingType, district, colomboArea, lat, lng, beds, bathrooms, facilities, images, status, createdAt, updatedAt, ownerId, pendingApprovals")
     .order("createdAt", { ascending: false });
   
   if (ownerId) {
@@ -28,6 +29,36 @@ router.get("/", async (req, res) => {
     console.error("Error fetching listings:", error);
     return res.status(500).json({ error: error.message });
   }
+  
+  // Add cache headers for public listings
+  res.setHeader("Cache-Control", "public, max-age=60");
+  return res.json(data ?? []);
+});
+
+// GET /listings/map (public) - minimal data for map view (id, lat, lng only)
+router.get("/map", async (req, res) => {
+  const status = req.query.status as string | undefined;
+  
+  let query = supabase
+    .from("listings")
+    .select("id, title, lat, lng, boardingType, status")
+    .not("lat", "is", null)
+    .not("lng", "is", null);
+  
+  if (status) {
+    query = query.eq("status", status);
+  } else {
+    query = query.eq("status", "Active");
+  }
+  
+  const { data, error } = await query;
+  if (error) {
+    console.error("Error fetching map listings:", error);
+    return res.status(500).json({ error: error.message });
+  }
+  
+  // Cache map data longer since it changes less frequently
+  res.setHeader("Cache-Control", "public, max-age=300");
   return res.json(data ?? []);
 });
 
@@ -78,10 +109,10 @@ router.get("/by-numeric-id/:numericId", async (req, res) => {
     return res.status(404).json({ error: "Listing not found" });
   }
   
-  // Now fetch only the specific listing's full data
+  // Now fetch only the specific listing's full data (select specific fields)
   const { data: matchingListing, error: detailError } = await supabase
     .from("listings")
-    .select("*")
+    .select("id, title, description, price, negotiable, boardingType, district, colomboArea, lat, lng, beds, bathrooms, facilities, images, status, createdAt, updatedAt, ownerId, pendingApprovals")
     .eq("id", matchingId.id)
     .single();
   
@@ -98,10 +129,13 @@ router.get("/by-numeric-id/:numericId", async (req, res) => {
       .eq("id", matchingListing.ownerId)
       .single();
     if (!ownerError && owner) {
+      // Cache individual listings for 60 seconds
+      res.setHeader("Cache-Control", "public, max-age=60");
       return res.json({ ...matchingListing, owner });
     }
   }
   
+  res.setHeader("Cache-Control", "public, max-age=60");
   return res.json(matchingListing);
 });
 
@@ -168,10 +202,10 @@ router.post("/:id/increment-pending-approvals", async (req, res) => {
 // GET /listings/:id (public)
 router.get("/:id", async (req, res) => {
   const id = req.params.id;
-  // Use SELECT * to avoid issues if pendingApprovals column doesn't exist yet
+  // Select only required fields
   const { data, error } = await supabase
     .from("listings")
-    .select("*")
+    .select("id, title, description, price, negotiable, boardingType, district, colomboArea, lat, lng, beds, bathrooms, facilities, images, status, createdAt, updatedAt, ownerId, pendingApprovals")
     .eq("id", id)
     .single();
   if (error) return res.status(404).json({ error: "Listing not found" });
@@ -189,10 +223,12 @@ router.get("/:id", async (req, res) => {
       .eq("id", data.ownerId)
       .single();
     if (!ownerError && owner) {
+      res.setHeader("Cache-Control", "public, max-age=60");
       return res.json({ ...data, owner });
     }
   }
   
+  res.setHeader("Cache-Control", "public, max-age=60");
   return res.json(data);
 });
 

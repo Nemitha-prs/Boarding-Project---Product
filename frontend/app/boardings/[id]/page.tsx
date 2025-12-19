@@ -22,6 +22,7 @@ import { incrementPendingApprovals } from "@/utils/pendingApprovals";
 import { useEffect, useState, useRef, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
 import { getApiUrl } from "@/lib/auth";
+import { apiCache } from "@/lib/cache";
 import type { BoardingListing } from "@/lib/fakeData";
 import { stringIdToNumeric } from "@/utils/idConverter";
 import { getReferenceCoordinate, getReferenceName, haversineKm } from "@/utils/distance";
@@ -134,21 +135,32 @@ export default function BoardingDetailsPage({ params }: BoardingDetailsPageProps
           return;
         }
         
-        // Fetch the specific listing by numeric ID (single request)
-        const response = await fetch(getApiUrl(`/listings/by-numeric-id/${numericId}`));
-        if (!response.ok) {
-          if (response.status === 404) {
-            setError("Listing not found");
-          } else {
-            setError("Failed to load listing");
-          }
-          setListing(null);
-          setDbListing(null);
-          setLoading(false);
-          return;
-        }
+        const cacheKey = `/listings/by-numeric-id/${numericId}`;
+        let listingWithOwner: DbListing;
         
-        const listingWithOwner: DbListing = await response.json();
+        // Check cache first
+        const cached = apiCache.get<DbListing>(cacheKey);
+        if (cached) {
+          listingWithOwner = cached;
+        } else {
+          // Fetch the specific listing by numeric ID (single request)
+          const response = await fetch(getApiUrl(cacheKey));
+          if (!response.ok) {
+            if (response.status === 404) {
+              setError("Listing not found");
+            } else {
+              setError("Failed to load listing");
+            }
+            setListing(null);
+            setDbListing(null);
+            setLoading(false);
+            return;
+          }
+          
+          listingWithOwner = await response.json();
+          // Cache for 60 seconds
+          apiCache.set(cacheKey, listingWithOwner, 60000);
+        }
         
         // Verify the listing is Active
         if (listingWithOwner.status !== "Active") {

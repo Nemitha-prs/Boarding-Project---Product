@@ -1,7 +1,7 @@
 "use client";
 
 import { useJsApiLoader, GoogleMap, Marker } from "@react-google-maps/api";
-import { useMemo } from "react";
+import { useMemo, useState, useEffect } from "react";
 
 interface SingleBoardingMapProps {
   lat: number | null;
@@ -13,7 +13,7 @@ interface SingleBoardingMapProps {
 const DEFAULT_CENTER = { lat: 7.8731, lng: 80.7718 };
 const DEFAULT_ZOOM = 15; // Higher zoom for single location
 
-export default function SingleBoardingMap({ lat, lng, title }: SingleBoardingMapProps) {
+function SingleBoardingMapContent({ lat, lng, title }: SingleBoardingMapProps) {
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "";
 
   const { isLoaded, loadError } = useJsApiLoader({
@@ -75,5 +75,27 @@ export default function SingleBoardingMap({ lat, lng, title }: SingleBoardingMap
       </GoogleMap>
     </div>
   );
+}
+
+export default function SingleBoardingMap({ lat, lng, title }: SingleBoardingMapProps) {
+  const [shouldLoadMap, setShouldLoadMap] = useState(false);
+
+  // Delay map loading by 500ms to prevent blocking initial render
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setShouldLoadMap(true);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, []);
+
+  if (!shouldLoadMap) {
+    return (
+      <div className="flex h-56 w-full items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 text-sm text-slate-500">
+        Loading map...
+      </div>
+    );
+  }
+
+  return <SingleBoardingMapContent lat={lat} lng={lng} title={title} />;
 }
 

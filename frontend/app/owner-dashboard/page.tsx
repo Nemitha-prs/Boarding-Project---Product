@@ -9,6 +9,7 @@ import Link from "next/link";
 import { getViews } from "@/utils/views";
 import { getPendingApprovalsForListing } from "@/utils/pendingApprovals";
 import { fetchWithAuth, getApiUrl, setToken, isAuthenticated } from "@/lib/auth";
+import { apiCache } from "@/lib/cache";
 import { getCurrentUserId, getCurrentUserRole } from "@/lib/jwt";
 import { stringIdToNumeric } from "@/utils/idConverter";
 import DeleteConfirmModal from "@/components/DeleteConfirmModal";
@@ -86,12 +87,24 @@ export default function OwnerDashboardPage() {
           return;
         }
 
-        // Fetch only owner's listings using query parameter for better performance
-        const response = await fetch(getApiUrl(`/listings?ownerId=${ownerId}`));
-        if (!response.ok) {
-          throw new Error("Failed to fetch listings");
+        const cacheKey = `/listings?ownerId=${ownerId}`;
+        let myListings: DbListing[] = [];
+        
+        // Check cache first (shorter TTL for owner data)
+        const cached = apiCache.get<DbListing[]>(cacheKey);
+        if (cached) {
+          myListings = cached;
+        } else {
+          // Fetch only owner's listings using query parameter for better performance
+          const response = await fetch(getApiUrl(cacheKey));
+          if (!response.ok) {
+            throw new Error("Failed to fetch listings");
+          }
+          myListings = await response.json();
+          // Cache for 30 seconds (shorter for owner data)
+          apiCache.set(cacheKey, myListings, 30000);
         }
-        const myListings: DbListing[] = await response.json();
+        
         setOwnerListings(myListings);
         setError("");
       } catch (err: any) {
@@ -229,8 +242,40 @@ export default function OwnerDashboardPage() {
             </div>
 
             {loading ? (
-              <div className="mt-4 rounded-2xl border border-slate-100 bg-white p-12 text-center">
-                <p className="text-sm font-medium text-slate-600">Loading listings...</p>
+              <div className="mt-4 overflow-hidden rounded-2xl border border-slate-100">
+                <table className="min-w-full divide-y divide-slate-100 text-sm">
+                  <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+                    <tr>
+                      <th className="px-5 py-3">Listing</th>
+                      <th className="px-5 py-3">Price</th>
+                      <th className="px-5 py-3">Views</th>
+                      <th className="px-5 py-3">Status</th>
+                      <th className="px-5 py-3">Last updated</th>
+                      <th className="px-5 py-3 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 bg-white">
+                    {[...Array(3)].map((_, i) => (
+                      <tr key={i} className="hover:bg-slate-50/70">
+                        <td className="px-5 py-4">
+                          <div className="h-4 w-20 bg-slate-200 rounded animate-pulse mb-2" />
+                          <div className="h-5 w-48 bg-slate-200 rounded animate-pulse" />
+                        </td>
+                        <td className="px-5 py-4"><div className="h-4 w-24 bg-slate-200 rounded animate-pulse" /></td>
+                        <td className="px-5 py-4"><div className="h-6 w-12 bg-slate-200 rounded-full animate-pulse" /></td>
+                        <td className="px-5 py-4"><div className="h-6 w-16 bg-slate-200 rounded-full animate-pulse" /></td>
+                        <td className="px-5 py-4"><div className="h-4 w-20 bg-slate-200 rounded animate-pulse" /></td>
+                        <td className="px-5 py-4">
+                          <div className="flex justify-end gap-2">
+                            <div className="h-8 w-8 bg-slate-200 rounded-full animate-pulse" />
+                            <div className="h-8 w-8 bg-slate-200 rounded-full animate-pulse" />
+                            <div className="h-8 w-8 bg-slate-200 rounded-full animate-pulse" />
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             ) : error ? (
               <div className="mt-4 rounded-2xl border border-red-100 bg-red-50 p-12 text-center">

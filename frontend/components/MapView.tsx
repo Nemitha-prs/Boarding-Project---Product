@@ -1,7 +1,7 @@
 "use client";
 
 import { useJsApiLoader, GoogleMap, Marker, InfoWindow } from "@react-google-maps/api";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 
 interface MapViewProps {
@@ -19,13 +19,14 @@ interface MapViewProps {
 const DEFAULT_CENTER = { lat: 7.8731, lng: 80.7718 };
 const DEFAULT_ZOOM = 7;
 
-export default function MapView({ listings }: MapViewProps) {
+function MapViewContent({ listings }: MapViewProps) {
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "";
   const [selectedListing, setSelectedListing] = useState<string | null>(null);
   const router = useRouter();
 
   const { isLoaded, loadError } = useJsApiLoader({
     googleMapsApiKey: apiKey || "dummy-key",
+    libraries: ["places"],
   });
 
   // Filter listings with valid coordinates and calculate bounds
@@ -142,4 +143,26 @@ export default function MapView({ listings }: MapViewProps) {
       </GoogleMap>
     </div>
   );
+}
+
+export default function MapView({ listings }: MapViewProps) {
+  const [shouldLoadMap, setShouldLoadMap] = useState(false);
+
+  // Delay map loading by 500ms to prevent blocking initial render
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setShouldLoadMap(true);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, []);
+
+  if (!shouldLoadMap) {
+    return (
+      <div className="flex aspect-square items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-slate-50 text-center text-sm text-slate-500">
+        Loading map...
+      </div>
+    );
+  }
+
+  return <MapViewContent listings={listings} />;
 }

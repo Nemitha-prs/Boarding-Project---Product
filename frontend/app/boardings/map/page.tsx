@@ -6,6 +6,7 @@ import Footer from "@/components/Footer";
 import MapView from "@/components/MapView";
 import Link from "next/link";
 import { getApiUrl } from "@/lib/auth";
+import { apiCache } from "@/lib/cache";
 import { stringIdToNumeric } from "@/utils/idConverter";
 
 interface DbListing {
@@ -35,13 +36,25 @@ export default function BoardingsMapPage() {
         setLoading(true);
         setError("");
         
-        // Fetch only active listings
-        const response = await fetch(getApiUrl("/listings?status=Active"));
-        if (!response.ok) {
-          throw new Error("Failed to fetch listings for map");
+        // Use optimized map endpoint that only returns minimal data
+        const cacheKey = "/listings/map?status=Active";
+        let data: DbListing[] = [];
+        
+        // Check cache first
+        const cached = apiCache.get<DbListing[]>(cacheKey);
+        if (cached) {
+          data = cached;
+        } else {
+          const response = await fetch(getApiUrl(cacheKey));
+          if (!response.ok) {
+            throw new Error("Failed to fetch listings for map");
+          }
+          
+          data = await response.json();
+          // Cache map data for 5 minutes
+          apiCache.set(cacheKey, data, 300000);
         }
         
-        const data: DbListing[] = await response.json();
         // Transform data for MapView with numeric IDs for routing
         const mapListings = data.map((listing) => ({
           id: listing.id,

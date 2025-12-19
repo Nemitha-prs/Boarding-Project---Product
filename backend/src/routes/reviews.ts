@@ -50,6 +50,8 @@ router.get("/:boardingId", async (req, res) => {
       })
     );
     
+    // Cache reviews for 60 seconds
+    res.setHeader("Cache-Control", "public, max-age=60");
     return res.json(reviewsWithUsers);
   } catch (e: any) {
     console.error("Fetch reviews error:", e);

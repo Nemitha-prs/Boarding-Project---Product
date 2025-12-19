@@ -6,6 +6,7 @@ import FilterBar from "@/components/FilterBar";
 import ListingCard from "@/components/ListingCard";
 import { getBookmarks, fetchUserBookmarks } from "@/utils/bookmarks";
 import { getApiUrl, isAuthenticated } from "@/lib/auth";
+import { apiCache } from "@/lib/cache";
 import type { BoardingListing } from "@/lib/fakeData";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
@@ -633,7 +634,7 @@ export default function BoardingsPage() {
   // Track if listings have been fetched to prevent unnecessary re-fetches
   const listingsFetchedRef = useRef(false);
 
-  // Fetch listings and bookmarks together (only on mount)
+  // Fetch listings and bookmarks in parallel (only on mount)
   useEffect(() => {
     // Skip if already fetched (prevents unnecessary re-fetches on re-renders)
     if (listingsFetchedRef.current) {
@@ -643,13 +644,24 @@ export default function BoardingsPage() {
     async function fetchAllPageData() {
       setLoading(true);
       try {
-        // Fetch only active listings from backend (filtered server-side)
-        const listingsResponse = await fetch(getApiUrl("/listings?status=Active"));
-        if (!listingsResponse.ok) {
-          throw new Error("Failed to fetch listings");
-        }
+        const cacheKey = "/listings?status=Active";
+        let dbListingsData: DbListing[];
         
-        const dbListingsData: DbListing[] = await listingsResponse.json();
+        // Check cache first
+        const cached = apiCache.get<DbListing[]>(cacheKey);
+        if (cached) {
+          dbListingsData = cached;
+        } else {
+          // Fetch only active listings from backend (filtered server-side)
+          const listingsResponse = await fetch(getApiUrl(cacheKey));
+          if (!listingsResponse.ok) {
+            throw new Error("Failed to fetch listings");
+          }
+          
+          dbListingsData = await listingsResponse.json();
+          // Cache for 60 seconds
+          apiCache.set(cacheKey, dbListingsData, 60000);
+        }
         
         // Process listings immediately (already filtered by backend)
         const activeDbListings: DbListing[] = [];
@@ -672,33 +684,45 @@ export default function BoardingsPage() {
         listingsFetchedRef.current = true;
         setLoading(false);
         
-        // Fetch bookmarks separately and update when ready (non-blocking)
+        // Parallelize bookmarks and ratings fetches
+        const promises: Promise<any>[] = [];
+        
+        // Fetch bookmarks in parallel if authenticated
         if (isAuthenticated()) {
-          fetchUserBookmarks()
-            .then((dbBookmarkIds: string[]) => {
-              const bookmarkSet = new Set(dbBookmarkIds);
-              const numericBookmarkIds: number[] = [];
-              mapping.forEach((dbId, numericId) => {
-                if (bookmarkSet.has(dbId)) {
-                  numericBookmarkIds.push(numericId);
-                }
-              });
-              setBookmarkIds(numericBookmarkIds);
-            })
-            .catch(() => {
-              // Silent fail - bookmarks just won't show
-            });
+          promises.push(
+            fetchUserBookmarks()
+              .then((dbBookmarkIds: string[]) => {
+                const bookmarkSet = new Set(dbBookmarkIds);
+                const numericBookmarkIds: number[] = [];
+                mapping.forEach((dbId, numericId) => {
+                  if (bookmarkSet.has(dbId)) {
+                    numericBookmarkIds.push(numericId);
+                  }
+                });
+                setBookmarkIds(numericBookmarkIds);
+              })
+              .catch(() => {
+                // Silent fail - bookmarks just won't show
+              })
+          );
         }
 
-        // Fetch ratings for all listings (non-blocking)
-        fetchRatingsForListings(activeDbListings.map(l => l.id))
-          .then((ratingsMap) => {
-            setRatings(ratingsMap);
-          })
-          .catch((err) => {
-            console.error("Error fetching ratings:", err);
-            // Silent fail - ratings just won't show
-          });
+        // Fetch ratings in parallel
+        promises.push(
+          fetchRatingsForListings(activeDbListings.map(l => l.id))
+            .then((ratingsMap) => {
+              setRatings(ratingsMap);
+            })
+            .catch((err) => {
+              console.error("Error fetching ratings:", err);
+              // Silent fail - ratings just won't show
+            })
+        );
+        
+        // Wait for all parallel requests (non-blocking for UI)
+        Promise.all(promises).catch(() => {
+          // Individual errors already handled
+        });
       } catch (err: any) {
         console.error("Error fetching listings:", err);
         setError(err.message || "Failed to load listings");
@@ -715,16 +739,28 @@ export default function BoardingsPage() {
   async function fetchRatingsForListings(listingIds: string[]): Promise<Map<string, { rating: number; count: number }>> {
     const ratingsMap = new Map<string, { rating: number; count: number }>();
     
-    // Fetch reviews for all listings in parallel
+    // Fetch reviews for all listings in parallel with caching
     const reviewPromises = listingIds.map(async (listingId) => {
       try {
-        const response = await fetch(getApiUrl(`/reviews/${listingId}`));
-        if (response.ok) {
-          const reviews = await response.json();
-          if (Array.isArray(reviews) && reviews.length > 0) {
-            const avgRating = reviews.reduce((sum: number, r: any) => sum + r.rating, 0) / reviews.length;
-            ratingsMap.set(listingId, { rating: avgRating, count: reviews.length });
+        const cacheKey = `/reviews/${listingId}`;
+        let reviews: any[] = [];
+        
+        // Check cache first
+        const cached = apiCache.get<any[]>(cacheKey);
+        if (cached) {
+          reviews = cached;
+        } else {
+          const response = await fetch(getApiUrl(cacheKey));
+          if (response.ok) {
+            reviews = await response.json();
+            // Cache for 60 seconds
+            apiCache.set(cacheKey, reviews, 60000);
           }
+        }
+        
+        if (Array.isArray(reviews) && reviews.length > 0) {
+          const avgRating = reviews.reduce((sum: number, r: any) => sum + r.rating, 0) / reviews.length;
+          ratingsMap.set(listingId, { rating: avgRating, count: reviews.length });
         }
       } catch (err) {
         // Silent fail for individual listings
@@ -764,6 +800,7 @@ export default function BoardingsPage() {
 
   const sortedListings = useMemo(() => {
     if (!bookmarkIds.length) return filteredListings;
+    const bookmarkSet = new Set(bookmarkIds);
     const copy = [...filteredListings];
     copy.sort((a, b) => {
       const aB = bookmarkSet.has(a.id) ? 1 : 0;
@@ -772,7 +809,7 @@ export default function BoardingsPage() {
       return 0;
     });
     return copy;
-  }, [filteredListings, bookmarkSet, bookmarkIds.length]);
+  }, [filteredListings, bookmarkIds]);
 
   return (
     <>
@@ -924,8 +961,19 @@ export default function BoardingsPage() {
           </div>
 
           {loading ? (
-            <div className="flex flex-col items-center justify-center rounded-3xl bg-white/80 p-12 text-center">
-              <p className="text-sm font-medium text-slate-600">Loading listings...</p>
+            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+              {[...Array(6)].map((_, i) => (
+                <div key={i} className="overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-gray-100">
+                  <div className="h-56 w-full bg-slate-200 animate-pulse" />
+                  <div className="p-5 space-y-3">
+                    <div className="h-4 w-24 bg-slate-200 rounded animate-pulse" />
+                    <div className="h-6 w-3/4 bg-slate-200 rounded animate-pulse" />
+                    <div className="h-4 w-full bg-slate-200 rounded animate-pulse" />
+                    <div className="h-4 w-2/3 bg-slate-200 rounded animate-pulse" />
+                    <div className="h-5 w-20 bg-slate-200 rounded animate-pulse" />
+                  </div>
+                </div>
+              ))}
             </div>
           ) : sortedListings.length === 0 ? (
             <div className="flex flex-col items-center justify-center rounded-3xl bg-white/80 p-10 text-center text-sm text-slate-500 shadow-sm ring-1 ring-gray-100">
