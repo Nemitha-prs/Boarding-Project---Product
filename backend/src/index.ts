@@ -1,6 +1,6 @@
 import express from "express";
 import cors from "cors";
-import { ENV } from "./env";
+import { ENV } from "./env.js";
 
 import authRoutes from "./routes/auth";
 import listingsRoutes from "./routes/listings";
