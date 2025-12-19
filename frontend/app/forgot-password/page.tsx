@@ -15,25 +15,24 @@ export default function ForgotPasswordPage() {
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
-  const [sending, setSending] = useState(false);
+  const [isSendingOtp, setIsSendingOtp] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
-  const [countdown, setCountdown] = useState(0);
-  const [isTimerActive, setIsTimerActive] = useState(false);
+  const [otpCooldown, setOtpCooldown] = useState(0); // SINGLE timer: 120 seconds
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
   
   // Ref to prevent race conditions - tracks if request is in flight
   const otpRequestInFlight = useRef(false);
 
-  // Countdown timer
+  // SINGLE OTP Timer - 120 seconds cooldown (starts only after backend success)
   useEffect(() => {
-    if (isTimerActive && countdown > 0) {
-      const timer = setTimeout(() => setCountdown(countdown - 1), 1000);
+    if (otpCooldown > 0) {
+      const timer = setTimeout(() => {
+        setOtpCooldown((prev) => prev - 1);
+      }, 1000);
       return () => clearTimeout(timer);
-    } else if (countdown === 0) {
-      setIsTimerActive(false);
     }
-  }, [isTimerActive, countdown]);
+  }, [otpCooldown]);
 
   const formatTime = (seconds: number): string => {
     const mins = Math.floor(seconds / 60);
@@ -76,22 +75,20 @@ export default function ForgotPasswordPage() {
   };
 
   const handleSendOTP = async () => {
-    // Early validation - return BEFORE setting loading state
+    // Early validation
     if (!emailIsValid(email)) {
       setError("Please enter a valid email address");
       return;
     }
 
-    // Prevent double-click: use ref for immediate check (not dependent on React state)
-    if (otpRequestInFlight.current) {
+    // Prevent double-click: use ref for immediate check
+    if (otpRequestInFlight.current || isSendingOtp) {
       return;
     }
 
     // Mark request as in flight IMMEDIATELY (synchronous)
     otpRequestInFlight.current = true;
-
-    // Set loading state BEFORE making request
-    setSending(true);
+    setIsSendingOtp(true);
     setError("");
     setSuccess("");
 
@@ -102,40 +99,37 @@ export default function ForgotPasswordPage() {
         body: JSON.stringify({ email }),
       });
 
-      // Parse response
       const data = await res.json().catch(() => ({}));
 
       if (!res.ok) {
         if (res.status === 429) {
           // Cooldown enforced by backend - use exact remaining time
           const cooldownSeconds = data.cooldownSeconds || 120;
-          setCountdown(cooldownSeconds);
-          setIsTimerActive(true);
+          setOtpCooldown(cooldownSeconds);
           setError(data.message || data.error || "Please wait before requesting another OTP");
-          setSending(false);
+          setIsSendingOtp(false);
           otpRequestInFlight.current = false;
           return;
         }
         throw new Error(data.error || data.message || "Failed to send OTP");
       }
 
-      // CRITICAL: Only update state AFTER backend confirms success with success: true
+      // CRITICAL: Only update state AFTER backend confirms success
       if (data.success !== true) {
         throw new Error(data.error || data.message || "Failed to send OTP");
       }
 
-      // Backend confirmed OTP was sent successfully - now update UI state
+      // Backend confirmed OTP was sent - update UI state
       setSuccess("OTP sent to your email");
       setStep("otp");
-      setIsTimerActive(true);
-      setCountdown(data.cooldownSeconds || 120); // Use backend-provided cooldown
+      setOtpCooldown(data.cooldownSeconds || 120); // Start SINGLE timer
       setOtp(["", "", "", "", "", ""]);
       inputRefs.current[0]?.focus();
-      setSending(false);
+      setIsSendingOtp(false);
       otpRequestInFlight.current = false;
     } catch (err: any) {
       setError(err.message || "Failed to send OTP");
-      setSending(false);
+      setIsSendingOtp(false);
       otpRequestInFlight.current = false;
     }
   };
@@ -280,10 +274,10 @@ export default function ForgotPasswordPage() {
                     <button
                       type="button"
                       onClick={handleSendOTP}
-                      disabled={!emailIsValid(email) || sending || (isTimerActive && countdown > 0)}
+                      disabled={!emailIsValid(email) || isSendingOtp || otpCooldown > 0}
                       className="w-full rounded-full bg-slate-900 px-6 py-3 text-sm font-semibold text-white transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-60"
                     >
-                      {sending ? "Sending..." : isTimerActive && countdown > 0 ? `Resend in ${formatTime(countdown)}` : "Send OTP"}
+                      {isSendingOtp ? "Sending..." : otpCooldown > 0 ? `Resend in ${formatTime(otpCooldown)}` : step === "otp" ? "Resend OTP" : "Send OTP"}
                     </button>
                   </>
                 )}
@@ -311,29 +305,19 @@ export default function ForgotPasswordPage() {
                           />
                         ))}
                       </div>
+                      <p className="mt-2 text-xs text-center text-slate-500">
+                        Check your email for the 6-digit code
+                      </p>
                     </div>
 
-                    <div className="flex items-center justify-between">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (countdown > 0) {
-                            setError(`Please wait ${Math.ceil(countdown / 60)} minute(s) before resending`);
-                            return;
-                          }
-                          handleSendOTP();
-                        }}
-                        disabled={sending || (isTimerActive && countdown > 0)}
-                        className="text-sm font-semibold text-brand-accent hover:underline disabled:text-slate-400 disabled:no-underline disabled:cursor-not-allowed transition-colors"
-                      >
-                        {sending ? "Sending..." : isTimerActive && countdown > 0 ? `Resend in ${formatTime(countdown)}` : "Resend code"}
-                      </button>
-                      {isTimerActive && (
-                        <span className="text-sm text-slate-500 font-mono">
-                          {formatTime(countdown)}
-                        </span>
-                      )}
-                    </div>
+                    {/* SINGLE resend button - shown only when cooldown active */}
+                    {otpCooldown > 0 && (
+                      <div className="text-center">
+                        <p className="text-sm text-slate-500">
+                          Resend available in <span className="font-mono font-semibold">{formatTime(otpCooldown)}</span>
+                        </p>
+                      </div>
+                    )}
 
                     <button
                       type="button"

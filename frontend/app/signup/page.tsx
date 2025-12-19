@@ -26,13 +26,13 @@ function SignupForm() {
   const [emailExists, setEmailExists] = useState(false);
   const [checkingEmail, setCheckingEmail] = useState(false);
 
-  // OTP state - ONLY string[] of length 6
+  // OTP state - SIMPLIFIED: single source of truth
   const [otp, setOtp] = useState<string[]>(["", "", "", "", "", ""]);
   const [otpSent, setOtpSent] = useState(false);
   const [otpVerified, setOtpVerified] = useState(false);
-  const [otpSending, setOtpSending] = useState(false);
+  const [isSendingOtp, setIsSendingOtp] = useState(false);
   const [otpVerifying, setOtpVerifying] = useState(false);
-  const [otpCountdown, setOtpCountdown] = useState(0);
+  const [otpCooldown, setOtpCooldown] = useState(0); // SINGLE timer: 120 seconds
   
   // Ref to prevent race conditions - tracks if request is in flight
   const otpRequestInFlight = useRef(false);
@@ -41,15 +41,15 @@ function SignupForm() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  // OTP Timer - 2 minutes (120 seconds) cooldown
+  // SINGLE OTP Timer - 120 seconds cooldown (starts only after backend success)
   useEffect(() => {
-    if (otpCountdown > 0) {
+    if (otpCooldown > 0) {
       const timer = setTimeout(() => {
-        setOtpCountdown((prev) => prev - 1);
+        setOtpCooldown((prev) => prev - 1);
       }, 1000);
       return () => clearTimeout(timer);
     }
-  }, [otpCountdown]);
+  }, [otpCooldown]);
 
   const emailIsValid = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 
@@ -242,12 +242,12 @@ function SignupForm() {
     }
   };
 
-  // Send OTP
+  // Send OTP - SINGLE handler for both Send and Resend
   const handleSendOtp = async (e?: React.MouseEvent<HTMLButtonElement>) => {
     e?.preventDefault();
     e?.stopPropagation();
 
-    // Early validation checks - return BEFORE setting loading state
+    // Early validation checks
     if (!emailIsValid(email)) {
       setError("Please enter a valid email address.");
       return;
@@ -263,16 +263,14 @@ function SignupForm() {
       return;
     }
 
-    // Prevent double-click: use ref for immediate check (not dependent on React state)
-    if (otpRequestInFlight.current) {
+    // Prevent double-click: use ref for immediate check
+    if (otpRequestInFlight.current || isSendingOtp) {
       return;
     }
 
     // Mark request as in flight IMMEDIATELY (synchronous)
     otpRequestInFlight.current = true;
-    
-    // Set loading state BEFORE making request
-    setOtpSending(true);
+    setIsSendingOtp(true);
     setError("");
 
     try {
@@ -282,45 +280,44 @@ function SignupForm() {
         body: JSON.stringify({ email, name }),
       });
 
-      // Parse response
       const data = await res.json().catch(() => ({}));
 
       if (!res.ok) {
         if (res.status === 409) {
           setError("Email already registered. Please log in.");
           setEmailExists(true);
-          setOtpSending(false);
+          setIsSendingOtp(false);
           otpRequestInFlight.current = false;
           return;
         }
         if (res.status === 429) {
           // Cooldown enforced by backend - use exact remaining time
           const cooldownSeconds = data.cooldownSeconds || 120;
-          setOtpCountdown(cooldownSeconds);
+          setOtpCooldown(cooldownSeconds);
           setError(data.message || data.error || "Please wait before requesting another OTP");
-          setOtpSending(false);
+          setIsSendingOtp(false);
           otpRequestInFlight.current = false;
           return;
         }
         throw new Error(data.error || data.message || "Failed to send OTP");
       }
 
-      // CRITICAL: Only update state AFTER backend confirms success with success: true
+      // CRITICAL: Only update state AFTER backend confirms success
       if (data.success !== true) {
         throw new Error(data.error || data.message || "Failed to send OTP");
       }
       
-      // Backend confirmed OTP was sent successfully - now update UI state
+      // Backend confirmed OTP was sent - update UI state
       setOtpSent(true);
-      setOtpCountdown(data.cooldownSeconds || 120); // Use backend-provided cooldown
+      setOtpCooldown(data.cooldownSeconds || 120); // Start SINGLE timer
       setOtp(["", "", "", "", "", ""]);
       setError("");
-      setOtpSending(false);
+      setIsSendingOtp(false);
       otpRequestInFlight.current = false;
     } catch (err: any) {
       setError(err.message || "Failed to send OTP. Please try again.");
       setOtpSent(false);
-      setOtpSending(false);
+      setIsSendingOtp(false);
       otpRequestInFlight.current = false;
     }
   };
@@ -368,10 +365,10 @@ function SignupForm() {
     }
   };
 
-  // Resend OTP - only if cooldown has expired
+  // Resend OTP - uses same handler as Send OTP
   const handleResendOtp = async () => {
-    if (otpCountdown > 0) {
-      setError(`Please wait ${Math.ceil(otpCountdown / 60)} minute(s) before resending`);
+    if (otpCooldown > 0) {
+      setError(`Please wait ${Math.ceil(otpCooldown / 60)} minute(s) before resending`);
       return;
     }
     setOtp(["", "", "", "", "", ""]);
@@ -588,16 +585,11 @@ function SignupForm() {
                     />
                     <button
                       type="button"
-                      onClick={(e) => {
-                        // Ensure click is processed even if button appears disabled
-                        e.preventDefault();
-                        e.stopPropagation();
-                        handleSendOtp(e);
-                      }}
-                      disabled={!emailIsValid(email) || otpSending || otpVerified || !name.trim() || emailExists || checkingEmail || otpCountdown > 0}
+                      onClick={handleSendOtp}
+                      disabled={!emailIsValid(email) || isSendingOtp || otpVerified || !name.trim() || emailExists || checkingEmail || otpCooldown > 0}
                       className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60 whitespace-nowrap min-w-[100px]"
                     >
-                      {otpSending ? "Sending..." : otpVerified ? "✓ Verified" : otpCountdown > 0 ? `Resend in ${Math.ceil(otpCountdown / 60)}m` : "Send OTP"}
+                      {isSendingOtp ? "Sending..." : otpVerified ? "✓ Verified" : otpCooldown > 0 ? `Resend in ${Math.ceil(otpCooldown / 60)}m` : otpSent ? "Resend OTP" : "Send OTP"}
                     </button>
                   </div>
                   {touched.email && errors.email && (
@@ -620,9 +612,9 @@ function SignupForm() {
                         setOtp={setOtp}
                         onVerify={handleVerifyOtp}
                         verifying={otpVerifying}
-                        countdown={otpCountdown}
+                        countdown={otpCooldown}
                         onResend={handleResendOtp}
-                        resending={otpSending}
+                        resending={isSendingOtp}
                       />
                     </div>
                   )}
