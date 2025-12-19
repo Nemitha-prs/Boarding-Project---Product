@@ -11,9 +11,20 @@ import dbTestRoute from "./routes/dbTest.js";
 const app = express();
 
 // Basic middleware
-app.use(cors());
+// CORS configuration - allow frontend and localhost for development
+app.use(cors({
+  origin: [
+    "https://anexlk.vercel.app",
+    "http://localhost:3000",
+    process.env.FRONTEND_URL || "http://localhost:3000"
+  ].filter(Boolean),
+  credentials: true
+}));
 app.use(express.json({ limit: "5mb" }));
 app.use(express.urlencoded({ extended: true, limit: "5mb" }));
+
+// Root route
+app.get("/", (_req, res) => res.json({ ok: true, message: "Backend API is running" }));
 
 // Health check
 app.get("/health", (_req, res) => res.json({ ok: true }));
