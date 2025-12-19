@@ -119,12 +119,16 @@ export default function ForgotPasswordPage() {
         throw new Error(data.error || data.message || "Failed to send OTP");
       }
 
-      // Backend confirmed OTP was sent - update UI state
-      setSuccess("OTP sent to your email");
+      // Backend confirmed OTP was sent - immediately show OTP input box
       setStep("otp");
       setOtpCooldown(data.cooldownSeconds || 120); // Start SINGLE timer
       setOtp(["", "", "", "", "", ""]);
-      inputRefs.current[0]?.focus();
+      setError("");
+      setSuccess(""); // Clear any previous success message
+      // Focus first OTP input after a brief delay to ensure DOM is ready
+      setTimeout(() => {
+        inputRefs.current[0]?.focus();
+      }, 100);
       setIsSendingOtp(false);
       otpRequestInFlight.current = false;
     } catch (err: any) {
@@ -277,7 +281,7 @@ export default function ForgotPasswordPage() {
                       disabled={!emailIsValid(email) || isSendingOtp || otpCooldown > 0}
                       className="w-full rounded-full bg-slate-900 px-6 py-3 text-sm font-semibold text-white transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-60"
                     >
-                      {isSendingOtp ? "Sending..." : otpCooldown > 0 ? `Resend in ${formatTime(otpCooldown)}` : step === "otp" ? "Resend OTP" : "Send OTP"}
+                      {isSendingOtp ? "Sending..." : otpCooldown > 0 ? `Resend in ${formatTime(otpCooldown)}` : "Send OTP"}
                     </button>
                   </>
                 )}
@@ -434,8 +438,8 @@ export default function ForgotPasswordPage() {
                   </div>
                 )}
 
-                {/* Success message */}
-                {success && (
+                {/* Success message - only show for password reset success, not for OTP step */}
+                {success && step === "reset" && (
                   <div className="rounded-lg border border-green-200 bg-green-50 p-3">
                     <p className="text-center text-sm font-medium text-green-700">{success}</p>
                   </div>
