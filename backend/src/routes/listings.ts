@@ -1,27 +1,21 @@
 import { Router } from "express";
-import { supabase } from "../supabase.js";
-import type { ListingRow, OwnerStatus } from "../types/db.js";
-import { jwtMiddleware, requireOwner } from "../middleware/auth.js";
+import { supabase } from "../supabase";
+import type { ListingRow, OwnerStatus } from "../types/db";
+import { jwtMiddleware, requireOwner } from "../middleware/auth";
 
 const router = Router();
 
-// GET /listings (public) - can filter by ownerId and status query parameters
+// GET /listings (public) - can filter by ownerId query parameter
 router.get("/", async (req, res) => {
   const ownerId = req.query.ownerId as string | undefined;
-  const status = req.query.status as string | undefined;
   
-  // Only select required fields to reduce payload size
   let query = supabase
     .from("listings")
-    .select("id, title, description, price, negotiable, boardingType, district, colomboArea, lat, lng, beds, bathrooms, facilities, images, status, createdAt, updatedAt, ownerId")
+    .select("*")
     .order("createdAt", { ascending: false });
   
   if (ownerId) {
     query = query.eq("ownerId", ownerId);
-  }
-  
-  if (status) {
-    query = query.eq("status", status);
   }
   
   const { data, error } = await query;
@@ -29,36 +23,6 @@ router.get("/", async (req, res) => {
     console.error("Error fetching listings:", error);
     return res.status(500).json({ error: error.message });
   }
-  
-  // Add cache headers for public listings
-  res.setHeader("Cache-Control", "public, max-age=60");
-  return res.json(data ?? []);
-});
-
-// GET /listings/map (public) - minimal data for map view (id, lat, lng, price, location)
-router.get("/map", async (req, res) => {
-  const status = req.query.status as string | undefined;
-  
-  let query = supabase
-    .from("listings")
-    .select("id, title, lat, lng, boardingType, status, price, district, colomboArea")
-    .not("lat", "is", null)
-    .not("lng", "is", null);
-  
-  if (status) {
-    query = query.eq("status", status);
-  } else {
-    query = query.eq("status", "Active");
-  }
-  
-  const { data, error } = await query;
-  if (error) {
-    console.error("Error fetching map listings:", error);
-    return res.status(500).json({ error: error.message });
-  }
-  
-  // Cache map data longer since it changes less frequently
-  res.setHeader("Cache-Control", "public, max-age=300");
   return res.json(data ?? []);
 });
 
@@ -84,10 +48,10 @@ router.get("/by-numeric-id/:numericId", async (req, res) => {
     return res.status(400).json({ error: "Invalid numeric ID" });
   }
   
-  // First, fetch only id fields from active listings (much smaller payload)
-  const { data: activeListingIds, error: fetchError } = await supabase
+  // Fetch all active listings
+  const { data: allListings, error: fetchError } = await supabase
     .from("listings")
-    .select("id")
+    .select("*")
     .eq("status", "Active");
   
   if (fetchError) {
@@ -95,29 +59,17 @@ router.get("/by-numeric-id/:numericId", async (req, res) => {
     return res.status(500).json({ error: fetchError.message });
   }
   
-  if (!activeListingIds || activeListingIds.length === 0) {
+  if (!allListings || allListings.length === 0) {
     return res.status(404).json({ error: "Listing not found" });
   }
   
-  // Find the listing ID with matching numeric ID
-  const matchingId = activeListingIds.find((listing) => {
+  // Find the listing with matching numeric ID
+  const matchingListing = allListings.find((listing) => {
     const listingNumericId = stringIdToNumeric(listing.id);
     return listingNumericId === numericId;
   });
   
-  if (!matchingId) {
-    return res.status(404).json({ error: "Listing not found" });
-  }
-  
-  // Now fetch only the specific listing's full data (select specific fields)
-  const { data: matchingListing, error: detailError } = await supabase
-    .from("listings")
-    .select("id, title, description, price, negotiable, boardingType, district, colomboArea, lat, lng, beds, bathrooms, facilities, images, status, createdAt, updatedAt, ownerId")
-    .eq("id", matchingId.id)
-    .single();
-  
-  if (detailError || !matchingListing) {
-    console.error("Error fetching listing details:", detailError);
+  if (!matchingListing) {
     return res.status(404).json({ error: "Listing not found" });
   }
   
@@ -129,13 +81,10 @@ router.get("/by-numeric-id/:numericId", async (req, res) => {
       .eq("id", matchingListing.ownerId)
       .single();
     if (!ownerError && owner) {
-      // Cache individual listings for 60 seconds
-      res.setHeader("Cache-Control", "public, max-age=60");
       return res.json({ ...matchingListing, owner });
     }
   }
   
-  res.setHeader("Cache-Control", "public, max-age=60");
   return res.json(matchingListing);
 });
 
@@ -150,10 +99,42 @@ router.post("/:id/increment-pending-approvals", async (req, res) => {
     return res.json({ pendingApprovals: typeof rpcData === 'number' ? rpcData : (rpcData as any).pendingApprovals || 0 });
   }
   
-  // Fallback: if RPC function doesn't exist, return error since column doesn't exist
+  // Fallback: if RPC function doesn't exist, use two-step approach (less ideal but works)
+  // This has a small race condition window but is acceptable as fallback
   if (rpcError && (rpcError.message?.includes('function') || rpcError.message?.includes('does not exist'))) {
-    // Column doesn't exist, return 0 as default
-    return res.json({ pendingApprovals: 0 });
+    // Check if listing exists first
+    const { data: listing, error: checkErr } = await supabase
+      .from("listings")
+      .select("id, pendingApprovals")
+      .eq("id", id)
+      .single();
+    
+    if (checkErr || !listing) {
+      return res.status(404).json({ error: "Listing not found" });
+    }
+    
+    // Increment pending approvals
+    const currentCount = typeof listing.pendingApprovals === "number" ? listing.pendingApprovals : 0;
+    const { data: updated, error: updateError } = await supabase
+      .from("listings")
+      .update({ 
+        pendingApprovals: currentCount + 1,
+        updatedAt: new Date().toISOString()
+      })
+      .eq("id", id)
+      .select("pendingApprovals")
+      .single();
+    
+    if (updateError) {
+      if (updateError.message?.includes("pendingApprovals") || updateError.message?.includes("column")) {
+        return res.status(500).json({ 
+          error: "Database column 'pendingApprovals' does not exist. Please add it to the listings table." 
+        });
+      }
+      return res.status(500).json({ error: updateError.message });
+    }
+    
+    return res.json({ pendingApprovals: updated?.pendingApprovals || 0 });
   }
   
   // Handle other RPC errors
@@ -170,13 +151,18 @@ router.post("/:id/increment-pending-approvals", async (req, res) => {
 // GET /listings/:id (public)
 router.get("/:id", async (req, res) => {
   const id = req.params.id;
-  // Select only required fields
+  // Use SELECT * to avoid issues if pendingApprovals column doesn't exist yet
   const { data, error } = await supabase
     .from("listings")
-    .select("id, title, description, price, negotiable, boardingType, district, colomboArea, lat, lng, beds, bathrooms, facilities, images, status, createdAt, updatedAt, ownerId")
+    .select("*")
     .eq("id", id)
     .single();
   if (error) return res.status(404).json({ error: "Listing not found" });
+  
+  // Ensure pendingApprovals exists (default to 0 if column doesn't exist)
+  if (data && typeof data.pendingApprovals !== "number") {
+    data.pendingApprovals = 0;
+  }
   
   // Also fetch owner info for contact details
   if (data?.ownerId) {
@@ -186,12 +172,10 @@ router.get("/:id", async (req, res) => {
       .eq("id", data.ownerId)
       .single();
     if (!ownerError && owner) {
-      res.setHeader("Cache-Control", "public, max-age=60");
       return res.json({ ...data, owner });
     }
   }
   
-  res.setHeader("Cache-Control", "public, max-age=60");
   return res.json(data);
 });
 
@@ -212,31 +196,7 @@ router.post("/", jwtMiddleware, requireOwner, async (req, res) => {
   ];
   for (const key of required) {
     if ((body as any)[key] === undefined || (body as any)[key] === null) {
-      if (key === "images") {
-        return res.status(400).json({ error: "At least one image is required" });
-      }
       return res.status(400).json({ error: `${key} is required` });
-    }
-  }
-
-  // Validate images array
-  if (!Array.isArray(body.images) || body.images.length === 0) {
-    return res.status(400).json({ error: "At least one image is required" });
-  }
-  
-  // Validate image data URLs (basic check)
-  const maxImageSize = 10 * 1024 * 1024; // 10 MB per image (base64 is ~33% larger than original)
-  for (let i = 0; i < body.images.length; i++) {
-    const image = body.images[i];
-    if (typeof image !== "string") {
-      return res.status(400).json({ error: `Image ${i + 1} is invalid. Please upload a valid image file.` });
-    }
-    if (!image.startsWith("data:image/")) {
-      return res.status(400).json({ error: `Image ${i + 1} format is invalid. Please use JPG, PNG, or WebP.` });
-    }
-    // Check approximate size (base64 string length is roughly 4/3 of original size)
-    if (image.length > maxImageSize) {
-      return res.status(400).json({ error: `Image ${i + 1} is too large. Maximum size is 5 MB per image.` });
     }
   }
 
@@ -262,19 +222,16 @@ router.post("/", jwtMiddleware, requireOwner, async (req, res) => {
     updatedAt: now,
   };
 
-  const { data, error } = await supabase.from("listings").insert(insert).select("id, title, description, price, negotiable, boardingType, district, colomboArea, lat, lng, beds, bathrooms, facilities, images, status, createdAt, updatedAt, ownerId").single();
+  const { data, error } = await supabase.from("listings").insert(insert).select("*").single();
   if (error) {
-    // Handle Supabase-specific errors
-    const errorMessage = error.message?.toLowerCase() || "";
-    if (errorMessage.includes("storage") || errorMessage.includes("bucket") || errorMessage.includes("supabase")) {
-      console.error("Supabase storage error:", error);
-      return res.status(500).json({ error: "Image upload service error. Please try again in a moment." });
-    }
-    if (errorMessage.includes("size") || errorMessage.includes("large") || errorMessage.includes("limit")) {
-      return res.status(400).json({ error: "Image is too large. Please use images smaller than 5 MB." });
-    }
-    console.error("Database error:", error);
-    return res.status(500).json({ error: "Failed to save listing. Please try again." });
+    // If error mentions pendingApprovals or schema cache, it's likely the column doesn't exist
+    // But since we're not including it in insert, this shouldn't happen unless SELECT * tries to get it
+    // The error is likely from SELECT * trying to fetch a non-existent column
+    return res.status(500).json({ error: error.message });
+  }
+  // Ensure pendingApprovals exists in response (default to 0 if column doesn't exist)
+  if (data && typeof (data as any).pendingApprovals !== "number") {
+    (data as any).pendingApprovals = 0;
   }
   return res.status(201).json(data);
 });
@@ -310,53 +267,16 @@ router.patch("/:id", jwtMiddleware, requireOwner, async (req, res) => {
   if (body.beds !== undefined) update.beds = body.beds;
   if (body.bathrooms !== undefined) update.bathrooms = Number(body.bathrooms);
   if (body.facilities !== undefined) update.facilities = Array.isArray(body.facilities) ? body.facilities : [];
-  if (body.images !== undefined) {
-    // Validate images array if provided
-    if (!Array.isArray(body.images)) {
-      return res.status(400).json({ error: "Images must be an array" });
-    }
-    if (body.images.length === 0) {
-      return res.status(400).json({ error: "At least one image is required" });
-    }
-    
-    // Validate image data URLs
-    const maxImageSize = 10 * 1024 * 1024; // 10 MB per image (base64)
-    for (let i = 0; i < body.images.length; i++) {
-      const image = body.images[i];
-      if (typeof image !== "string") {
-        return res.status(400).json({ error: `Image ${i + 1} is invalid. Please upload a valid image file.` });
-      }
-      if (!image.startsWith("data:image/")) {
-        return res.status(400).json({ error: `Image ${i + 1} format is invalid. Please use JPG, PNG, or WebP.` });
-      }
-      if (image.length > maxImageSize) {
-        return res.status(400).json({ error: `Image ${i + 1} is too large. Maximum size is 5 MB per image.` });
-      }
-    }
-    
-    update.images = body.images;
-  }
+  if (body.images !== undefined) update.images = Array.isArray(body.images) ? body.images : [];
   if (body.status !== undefined) update.status = body.status as OwnerStatus;
 
   const { data, error } = await supabase
     .from("listings")
     .update(update)
     .eq("id", id)
-    .select("id, title, description, price, negotiable, boardingType, district, colomboArea, lat, lng, beds, bathrooms, facilities, images, status, createdAt, updatedAt, ownerId")
+    .select("*")
     .single();
-  if (error) {
-    // Handle Supabase-specific errors
-    const errorMessage = error.message?.toLowerCase() || "";
-    if (errorMessage.includes("storage") || errorMessage.includes("bucket") || errorMessage.includes("supabase")) {
-      console.error("Supabase storage error:", error);
-      return res.status(500).json({ error: "Image upload service error. Please try again in a moment." });
-    }
-    if (errorMessage.includes("size") || errorMessage.includes("large") || errorMessage.includes("limit")) {
-      return res.status(400).json({ error: "Image is too large. Please use images smaller than 5 MB." });
-    }
-    console.error("Database error:", error);
-    return res.status(500).json({ error: "Failed to update listing. Please try again." });
-  }
+  if (error) return res.status(500).json({ error: error.message });
   return res.json(data);
 });
 
@@ -381,7 +301,7 @@ router.patch("/:id/status", jwtMiddleware, requireOwner, async (req, res) => {
     .from("listings")
     .update({ status, updatedAt: new Date().toISOString() })
     .eq("id", id)
-    .select("id, title, description, price, negotiable, boardingType, district, colomboArea, lat, lng, beds, bathrooms, facilities, images, status, createdAt, updatedAt, ownerId")
+    .select("*")
     .single();
   if (error) return res.status(500).json({ error: error.message });
   return res.json(data);

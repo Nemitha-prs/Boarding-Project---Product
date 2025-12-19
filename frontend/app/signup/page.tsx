@@ -1,15 +1,14 @@
 "use client";
-import { useState, useEffect, useRef, Suspense } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import OtpInput from "@/components/OtpInput";
 import { getApiUrl, setToken } from "@/lib/auth";
 
-function SignupForm() {
+export default function SignupPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
 
   // Form state
   const [name, setName] = useState("");
@@ -26,30 +25,27 @@ function SignupForm() {
   const [emailExists, setEmailExists] = useState(false);
   const [checkingEmail, setCheckingEmail] = useState(false);
 
-  // OTP state - SIMPLIFIED: single source of truth
+  // OTP state - ONLY string[] of length 6
   const [otp, setOtp] = useState<string[]>(["", "", "", "", "", ""]);
   const [otpSent, setOtpSent] = useState(false);
   const [otpVerified, setOtpVerified] = useState(false);
-  const [isSendingOtp, setIsSendingOtp] = useState(false);
+  const [otpSending, setOtpSending] = useState(false);
   const [otpVerifying, setOtpVerifying] = useState(false);
-  const [otpCooldown, setOtpCooldown] = useState(0); // SINGLE timer: 120 seconds
-  
-  // Ref to prevent race conditions - tracks if request is in flight
-  const otpRequestInFlight = useRef(false);
+  const [otpCountdown, setOtpCountdown] = useState(0);
 
   // UI state
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  // SINGLE OTP Timer - 120 seconds cooldown (starts only after backend success)
+  // OTP Timer - 5 minutes (300 seconds)
   useEffect(() => {
-    if (otpCooldown > 0) {
+    if (otpCountdown > 0) {
       const timer = setTimeout(() => {
-        setOtpCooldown((prev) => prev - 1);
+        setOtpCountdown((prev) => prev - 1);
       }, 1000);
       return () => clearTimeout(timer);
     }
-  }, [otpCooldown]);
+  }, [otpCountdown]);
 
   const emailIsValid = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 
@@ -242,12 +238,11 @@ function SignupForm() {
     }
   };
 
-  // Send OTP - SINGLE handler for both Send and Resend
+  // Send OTP
   const handleSendOtp = async (e?: React.MouseEvent<HTMLButtonElement>) => {
     e?.preventDefault();
     e?.stopPropagation();
 
-    // Early validation checks
     if (!emailIsValid(email)) {
       setError("Please enter a valid email address.");
       return;
@@ -263,14 +258,7 @@ function SignupForm() {
       return;
     }
 
-    // Prevent double-click: use ref for immediate check
-    if (otpRequestInFlight.current || isSendingOtp) {
-      return;
-    }
-
-    // Mark request as in flight IMMEDIATELY (synchronous)
-    otpRequestInFlight.current = true;
-    setIsSendingOtp(true);
+    setOtpSending(true);
     setError("");
 
     try {
@@ -280,45 +268,26 @@ function SignupForm() {
         body: JSON.stringify({ email, name }),
       });
 
-      const data = await res.json().catch(() => ({}));
-
       if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
         if (res.status === 409) {
           setError("Email already registered. Please log in.");
           setEmailExists(true);
-          setIsSendingOtp(false);
-          otpRequestInFlight.current = false;
           return;
         }
-        if (res.status === 429) {
-          // Cooldown enforced by backend - use exact remaining time
-          const cooldownSeconds = data.cooldownSeconds || 120;
-          setOtpCooldown(cooldownSeconds);
-          setError(data.message || data.error || "Please wait before requesting another OTP");
-          setIsSendingOtp(false);
-          otpRequestInFlight.current = false;
-          return;
-        }
-        throw new Error(data.error || data.message || "Failed to send OTP");
+        throw new Error(data.error || "Failed to send OTP");
       }
 
-      // CRITICAL: Only update state AFTER backend confirms success
-      if (data.success !== true) {
-        throw new Error(data.error || data.message || "Failed to send OTP");
-      }
-      
-      // Backend confirmed OTP was sent - update UI state
+      // CRITICAL: Set otpSent to true IMMEDIATELY after successful API call
       setOtpSent(true);
-      setOtpCooldown(data.cooldownSeconds || 120); // Start SINGLE timer
+      setOtpCountdown(300);
       setOtp(["", "", "", "", "", ""]);
       setError("");
-      setIsSendingOtp(false);
-      otpRequestInFlight.current = false;
     } catch (err: any) {
       setError(err.message || "Failed to send OTP. Please try again.");
       setOtpSent(false);
-      setIsSendingOtp(false);
-      otpRequestInFlight.current = false;
+    } finally {
+      setOtpSending(false);
     }
   };
 
@@ -365,12 +334,9 @@ function SignupForm() {
     }
   };
 
-  // Resend OTP - uses same handler as Send OTP
+  // Resend OTP
   const handleResendOtp = async () => {
-    if (otpCooldown > 0) {
-      setError(`Please wait ${Math.ceil(otpCooldown / 60)} minute(s) before resending`);
-      return;
-    }
+    setOtpCountdown(0);
     setOtp(["", "", "", "", "", ""]);
     setError("");
     await handleSendOtp();
@@ -379,11 +345,6 @@ function SignupForm() {
   // Final registration submit
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-
-    // Prevent double submission
-    if (loading) {
-      return;
-    }
 
     if (!otpVerified) {
       setError("Please verify your email with OTP before completing registration.");
@@ -428,12 +389,7 @@ function SignupForm() {
       if (data.token) {
         setToken(data.token);
         window.dispatchEvent(new Event("storage"));
-        const redirect = searchParams.get("redirect");
-        if (redirect) {
-          router.push(redirect);
-        } else {
-          router.push("/owner-dashboard");
-        }
+        router.push("/owner-dashboard");
       } else {
         throw new Error("No token received");
       }
@@ -585,11 +541,11 @@ function SignupForm() {
                     />
                     <button
                       type="button"
-                      onClick={handleSendOtp}
-                      disabled={!emailIsValid(email) || isSendingOtp || otpVerified || !name.trim() || emailExists || checkingEmail || otpCooldown > 0}
+                      onClick={(e) => handleSendOtp(e)}
+                      disabled={!emailIsValid(email) || otpSending || otpVerified || !name.trim() || emailExists || checkingEmail}
                       className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60 whitespace-nowrap min-w-[100px]"
                     >
-                      {isSendingOtp ? "Sending..." : otpVerified ? "✓ Verified" : otpCooldown > 0 ? `Resend in ${Math.ceil(otpCooldown / 60)}m` : otpSent ? "Resend OTP" : "Send OTP"}
+                      {otpSending ? "Sending..." : otpVerified ? "✓ Verified" : "Send OTP"}
                     </button>
                   </div>
                   {touched.email && errors.email && (
@@ -612,9 +568,9 @@ function SignupForm() {
                         setOtp={setOtp}
                         onVerify={handleVerifyOtp}
                         verifying={otpVerifying}
-                        countdown={otpCooldown}
+                        countdown={otpCountdown}
                         onResend={handleResendOtp}
-                        resending={isSendingOtp}
+                        resending={otpSending}
                       />
                     </div>
                   )}
@@ -693,23 +649,5 @@ function SignupForm() {
       </main>
       <Footer />
     </>
-  );
-}
-
-export default function SignupPage() {
-  return (
-    <Suspense fallback={
-      <>
-        <Navbar />
-        <main className="bg-[#F7F7F7] min-h-screen pt-28 pb-16 flex items-center justify-center">
-          <div className="text-center">
-            <p className="text-sm text-slate-600">Loading...</p>
-          </div>
-        </main>
-        <Footer />
-      </>
-    }>
-      <SignupForm />
-    </Suspense>
   );
 }

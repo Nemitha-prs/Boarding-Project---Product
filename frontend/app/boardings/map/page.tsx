@@ -6,7 +6,6 @@ import Footer from "@/components/Footer";
 import MapView from "@/components/MapView";
 import Link from "next/link";
 import { getApiUrl } from "@/lib/auth";
-import { apiCache } from "@/lib/cache";
 import { stringIdToNumeric } from "@/utils/idConverter";
 
 interface DbListing {
@@ -16,9 +15,6 @@ interface DbListing {
   lng: number | null;
   boardingType?: string;
   status: "Active" | "Not-active";
-  price?: number;
-  district?: string;
-  colomboArea?: string | null;
 }
 
 export default function BoardingsMapPage() {
@@ -29,8 +25,6 @@ export default function BoardingsMapPage() {
     lng: number | null;
     roomType?: string;
     numericId?: number;
-    price?: number;
-    location?: string;
   }>>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -41,25 +35,13 @@ export default function BoardingsMapPage() {
         setLoading(true);
         setError("");
         
-        // Use optimized map endpoint that only returns minimal data
-        const cacheKey = "/listings/map?status=Active";
-        let data: DbListing[] = [];
-        
-        // Check cache first
-        const cached = apiCache.get<DbListing[]>(cacheKey);
-        if (cached) {
-          data = cached;
-        } else {
-          const response = await fetch(getApiUrl(cacheKey));
-          if (!response.ok) {
-            throw new Error("Failed to fetch listings for map");
-          }
-          
-          data = await response.json();
-          // Cache map data for 5 minutes
-          apiCache.set(cacheKey, data, 300000);
+        // Fetch only active listings
+        const response = await fetch(getApiUrl("/listings?status=Active"));
+        if (!response.ok) {
+          throw new Error("Failed to fetch listings for map");
         }
         
+        const data: DbListing[] = await response.json();
         // Transform data for MapView with numeric IDs for routing
         const mapListings = data.map((listing) => ({
           id: listing.id,
@@ -68,8 +50,6 @@ export default function BoardingsMapPage() {
           lng: listing.lng,
           roomType: listing.boardingType,
           numericId: stringIdToNumeric(listing.id),
-          price: listing.price,
-          location: listing.colomboArea || listing.district || undefined,
         }));
         setListings(mapListings);
       } catch (err: any) {

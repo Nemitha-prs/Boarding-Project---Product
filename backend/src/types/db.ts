@@ -6,7 +6,7 @@ export interface UserRow {
   id: string;
   email: string;
   passwordHash: string | null;
-  role: "owner" | "user";
+  role: "owner";
   name: string;
   age: number | null;
   phone: string | null;
@@ -32,7 +32,7 @@ export interface ListingRow {
   images: string[];
   rating: number;
   status: OwnerStatus;
-  pendingApprovals?: number; // Optional - column may not exist in database
+  pendingApprovals: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -42,14 +42,5 @@ export interface BookmarkRow {
   userId: string;
   listingId: string;
   createdAt: string;
-}
-
-export interface ReviewRow {
-  id: string;
-  boarding_id: string;
-  user_id: string;
-  rating: number; // 1-5
-  comment: string;
-  created_at: string;
 }
 

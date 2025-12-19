@@ -4,10 +4,8 @@ import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import FilterBar from "@/components/FilterBar";
 import ListingCard from "@/components/ListingCard";
-import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { getBookmarks, fetchUserBookmarks } from "@/utils/bookmarks";
 import { getApiUrl, isAuthenticated } from "@/lib/auth";
-import { apiCache } from "@/lib/cache";
 import type { BoardingListing } from "@/lib/fakeData";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
@@ -555,9 +553,9 @@ function applyFilters(
     if (location.searchMode === "university" && location.selectedUniversity) {
       const areas = UNIVERSITY_AREAS[location.selectedUniversity] ?? [];
       if (areas.length > 0) {
-        const listingLocation = listing.location?.toLowerCase() || "";
+        const listingLocation = listing.location.toLowerCase();
         const matchesUniversityArea = areas.some((area) =>
-          listingLocation.includes(area?.toLowerCase() || "")
+          listingLocation.includes(area.toLowerCase())
         );
 
         if (!matchesUniversityArea) {
@@ -584,10 +582,10 @@ function applyFilters(
         const cityOption = COLOMBO_CITY_OPTIONS.find(
           (city) => city.code === location.selectedCity
         );
-        const areaName = ((cityOption?.name ?? location.selectedCity) || "").toLowerCase();
-        const listingLocation = listing.location?.toLowerCase() || "";
+        const areaName = (cityOption?.name ?? location.selectedCity).toLowerCase();
+        const listingLocation = listing.location.toLowerCase();
 
-        if (!listingLocation || !areaName || !listingLocation.includes(areaName)) {
+        if (!listingLocation.includes(areaName)) {
           return false;
         }
       }
@@ -612,9 +610,7 @@ function applyFilters(
 
     if (filters.roomType && filters.roomType.length > 0) {
       // Case-insensitive comparison to handle any casing differences
-      const listingRoomType = listing.roomType?.toLowerCase() || "";
-      const filterRoomType = filters.roomType?.toLowerCase() || "";
-      if (!listingRoomType || listingRoomType !== filterRoomType) {
+      if (listing.roomType.toLowerCase() !== filters.roomType.toLowerCase()) {
         return false;
       }
     }
@@ -636,60 +632,24 @@ export default function BoardingsPage() {
   const bookmarkSet = useMemo(() => new Set(bookmarkIds), [bookmarkIds]);
   // Track if listings have been fetched to prevent unnecessary re-fetches
   const listingsFetchedRef = useRef(false);
-  const [retryTrigger, setRetryTrigger] = useState(0);
 
-  // Fetch listings and bookmarks in parallel (only on mount or retry)
+  // Fetch listings and bookmarks together (only on mount)
   useEffect(() => {
     // Skip if already fetched (prevents unnecessary re-fetches on re-renders)
-    if (listingsFetchedRef.current && retryTrigger === 0) {
+    if (listingsFetchedRef.current) {
       return;
     }
 
     async function fetchAllPageData() {
       setLoading(true);
       try {
-        const cacheKey = "/listings?status=Active";
-        let dbListingsData: DbListing[];
-        
-        // Check cache first
-        const cached = apiCache.get<DbListing[]>(cacheKey);
-        if (cached) {
-          dbListingsData = cached;
-        } else {
         // Fetch only active listings from backend (filtered server-side)
-          const apiUrl = getApiUrl(cacheKey);
-          let listingsResponse: Response;
-          
-          try {
-            listingsResponse = await fetch(apiUrl);
-          } catch (networkError: any) {
-            // Network error (CORS, connection refused, etc.)
-            console.error("Network error fetching listings:", networkError);
-            throw new Error(`Unable to connect to backend. Please check if the API is running at ${apiUrl}`);
-          }
-          
+        const listingsResponse = await fetch(getApiUrl("/listings?status=Active"));
         if (!listingsResponse.ok) {
-            const errorText = await listingsResponse.text().catch(() => "Unknown error");
-            let errorMessage = `Backend returned ${listingsResponse.status}`;
-            try {
-              const errorJson = JSON.parse(errorText);
-              errorMessage = errorJson.error || errorMessage;
-            } catch {
-              errorMessage = errorText || errorMessage;
-            }
-            throw new Error(errorMessage);
-          }
-          
-          try {
-            dbListingsData = await listingsResponse.json();
-          } catch (parseError: any) {
-            console.error("Error parsing listings response:", parseError);
-            throw new Error("Invalid response from backend. Expected JSON data.");
-          }
-          
-          // Cache for 60 seconds
-          apiCache.set(cacheKey, dbListingsData, 60000);
+          throw new Error("Failed to fetch listings");
         }
+        
+        const dbListingsData: DbListing[] = await listingsResponse.json();
         
         // Process listings immediately (already filtered by backend)
         const activeDbListings: DbListing[] = [];
@@ -712,12 +672,8 @@ export default function BoardingsPage() {
         listingsFetchedRef.current = true;
         setLoading(false);
         
-        // Parallelize bookmarks and ratings fetches
-        const promises: Promise<any>[] = [];
-        
-        // Fetch bookmarks in parallel if authenticated
+        // Fetch bookmarks separately and update when ready (non-blocking)
         if (isAuthenticated()) {
-          promises.push(
           fetchUserBookmarks()
             .then((dbBookmarkIds: string[]) => {
               const bookmarkSet = new Set(dbBookmarkIds);
@@ -731,12 +687,10 @@ export default function BoardingsPage() {
             })
             .catch(() => {
               // Silent fail - bookmarks just won't show
-              })
-          );
+            });
         }
 
-        // Fetch ratings in parallel
-        promises.push(
+        // Fetch ratings for all listings (non-blocking)
         fetchRatingsForListings(activeDbListings.map(l => l.id))
           .then((ratingsMap) => {
             setRatings(ratingsMap);
@@ -744,55 +698,33 @@ export default function BoardingsPage() {
           .catch((err) => {
             console.error("Error fetching ratings:", err);
             // Silent fail - ratings just won't show
-            })
-        );
-        
-        // Wait for all parallel requests (non-blocking for UI)
-        Promise.all(promises).catch(() => {
-          // Individual errors already handled
           });
       } catch (err: any) {
         console.error("Error fetching listings:", err);
-        const errorMessage = err.message || "Failed to load listings";
-        setError(errorMessage);
+        setError(err.message || "Failed to load listings");
         setListings([]);
         setBookmarkIds([]);
-        setDbListings([]);
-        setIdMapping(new Map());
         setLoading(false);
-        listingsFetchedRef.current = false; // Allow retry
       }
     }
     
     fetchAllPageData();
-  }, [retryTrigger]); // Run on mount or when retry is triggered
+  }, []); // Only run on mount
 
   // Helper function to fetch ratings for multiple listings
   async function fetchRatingsForListings(listingIds: string[]): Promise<Map<string, { rating: number; count: number }>> {
     const ratingsMap = new Map<string, { rating: number; count: number }>();
     
-    // Fetch reviews for all listings in parallel with caching
+    // Fetch reviews for all listings in parallel
     const reviewPromises = listingIds.map(async (listingId) => {
       try {
-        const cacheKey = `/reviews/${listingId}`;
-        let reviews: any[] = [];
-        
-        // Check cache first
-        const cached = apiCache.get<any[]>(cacheKey);
-        if (cached) {
-          reviews = cached;
-        } else {
-          const response = await fetch(getApiUrl(cacheKey));
+        const response = await fetch(getApiUrl(`/reviews/${listingId}`));
         if (response.ok) {
-            reviews = await response.json();
-            // Cache for 60 seconds
-            apiCache.set(cacheKey, reviews, 60000);
-          }
-        }
-        
+          const reviews = await response.json();
           if (Array.isArray(reviews) && reviews.length > 0) {
             const avgRating = reviews.reduce((sum: number, r: any) => sum + r.rating, 0) / reviews.length;
             ratingsMap.set(listingId, { rating: avgRating, count: reviews.length });
+          }
         }
       } catch (err) {
         // Silent fail for individual listings
@@ -993,49 +925,8 @@ export default function BoardingsPage() {
           </div>
 
           {loading ? (
-            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-              {[...Array(6)].map((_, i) => (
-                <div key={i} className="overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-gray-100">
-                  <div className="h-56 w-full bg-slate-200 animate-pulse" />
-                  <div className="p-5 space-y-3">
-                    <div className="h-4 w-24 bg-slate-200 rounded animate-pulse" />
-                    <div className="h-6 w-3/4 bg-slate-200 rounded animate-pulse" />
-                    <div className="h-4 w-full bg-slate-200 rounded animate-pulse" />
-                    <div className="h-4 w-2/3 bg-slate-200 rounded animate-pulse" />
-                    <div className="h-5 w-20 bg-slate-200 rounded animate-pulse" />
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : error ? (
-            <div className="flex flex-col items-center justify-center rounded-3xl bg-white/80 p-10 text-center text-sm text-red-500 shadow-sm ring-1 ring-gray-100">
-              <p className="font-medium text-red-700">Error loading boardings</p>
-              <p className="mt-1 max-w-md text-xs text-red-500">{error}</p>
-              <button
-                onClick={() => {
-                  // Prevent double-click
-                  if (loading) return;
-                  
-                  listingsFetchedRef.current = false;
-                  setError("");
-                  setLoading(true);
-                  // Clear cache for this endpoint to force fresh fetch
-                  apiCache.delete("/listings?status=Active");
-                  // Trigger re-fetch
-                  setRetryTrigger(prev => prev + 1);
-                }}
-                disabled={loading}
-                className="mt-4 inline-flex items-center justify-center rounded-full bg-red-600 px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {loading ? "Retrying..." : "Retry"}
-              </button>
-            </div>
-          ) : listings.length === 0 ? (
-            <div className="flex flex-col items-center justify-center rounded-3xl bg-white/80 p-10 text-center text-sm text-slate-500 shadow-sm ring-1 ring-gray-100">
-              <p className="font-medium text-slate-700">No boardings available.</p>
-              <p className="mt-1 max-w-md text-xs text-slate-500">
-                There are currently no active boardings in the system.
-              </p>
+            <div className="flex flex-col items-center justify-center rounded-3xl bg-white/80 p-12 text-center">
+              <p className="text-sm font-medium text-slate-600">Loading listings...</p>
             </div>
           ) : sortedListings.length === 0 ? (
             <div className="flex flex-col items-center justify-center rounded-3xl bg-white/80 p-10 text-center text-sm text-slate-500 shadow-sm ring-1 ring-gray-100">
@@ -1045,41 +936,18 @@ export default function BoardingsPage() {
               </p>
             </div>
           ) : (
-            <ErrorBoundary
-              fallback={
-                <div className="flex flex-col items-center justify-center rounded-3xl bg-white/80 p-10 text-center text-sm text-red-500 shadow-sm ring-1 ring-gray-100">
-                  <p className="font-medium text-red-700">Error displaying listings</p>
-                  <button
-                    onClick={() => window.location.reload()}
-                    className="mt-4 inline-flex items-center justify-center rounded-full bg-red-600 px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-red-700"
-                  >
-                    Reload Page
-                  </button>
-                </div>
-              }
-            >
             <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-                {Array.isArray(sortedListings) && sortedListings.length > 0 ? (
-                  sortedListings.map((listing) => {
-                    if (!listing || !listing.id) return null;
-                    try {
-                      const dbId = idMapping?.get(listing.id);
-                      const ratingData = dbId ? ratings?.get(dbId) : undefined;
+              {sortedListings.map((listing) => {
+                const dbId = idMapping.get(listing.id);
+                const ratingData = dbId ? ratings.get(dbId) : undefined;
                 const cardProps: any = {
                   ...listing,
-                        id: listing.id,
-                        title: listing.title || "Untitled",
-                        description: listing.description || "",
-                        price: listing.price || "Price not available",
-                        image: listing.image || "/images/board1.jpg",
-                        location: listing.location || "Location not available",
-                        roomType: listing.roomType,
-                        bookmarked: bookmarkSet?.has(listing.id) || false,
-                      };
-                      if (ratingData && typeof ratingData.rating === "number") {
+                  bookmarked: bookmarkSet.has(listing.id),
+                };
+                if (ratingData?.rating !== undefined) {
                   cardProps.rating = ratingData.rating;
                 }
-                      if (ratingData && typeof ratingData.count === "number") {
+                if (ratingData?.count !== undefined) {
                   cardProps.reviewCount = ratingData.count;
                 }
                 return (
@@ -1088,14 +956,8 @@ export default function BoardingsPage() {
                     {...cardProps}
                   />
                 );
-                    } catch (err) {
-                      console.error("Error rendering listing card:", err);
-                      return null;
-                    }
-                  })
-                ) : null}
+              })}
             </div>
-            </ErrorBoundary>
           )}
         </section>
       </main>

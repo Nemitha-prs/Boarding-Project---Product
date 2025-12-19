@@ -3,11 +3,11 @@
 import Link from "next/link";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
-import { useState, useEffect, Suspense } from "react";
+import { useState, useEffect } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { getApiUrl, setToken } from "@/lib/auth";
 
-function LoginForm() {
+export default function LoginPage() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const [email, setEmail] = useState("");
@@ -17,21 +17,22 @@ function LoginForm() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
 
-  // Handle token from redirect (if any)
+  // Handle token from OAuth redirect
   useEffect(() => {
     const token = searchParams.get("token");
-    const redirect = searchParams.get("redirect");
+    const errorParam = searchParams.get("error");
+    
+    if (errorParam) {
+      setError(errorParam === "oauth_failed" ? "Google sign-in failed. Please try again." : "An error occurred during sign-in.");
+      return;
+    }
     
     if (token) {
       setToken(token);
       setSuccess(true);
-      // Redirect to redirect param, owner dashboard, or home
+      // Redirect to home or dashboard after short delay
       setTimeout(() => {
-        if (redirect) {
-          router.push(redirect);
-        } else {
-          router.push("/owner-dashboard");
-        }
+        router.push("/");
       }, 1000);
     }
   }, [searchParams, router]);
@@ -52,16 +53,18 @@ function LoginForm() {
                 <p className="text-sm text-slate-500">Access your account to manage your boardings.</p>
               </div>
 
+              <a
+                href={getApiUrl("/auth/google")}
+                className="mt-6 flex w-full items-center justify-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-800 shadow-sm transition hover:bg-slate-50"
+              >
+                <span className="h-4 w-4 rounded-full bg-white bg-[radial-gradient(circle_at_30%_30%,#FFCF33,#FF5733_40%,#4285F4_70%,#34A853)]" />
+                Continue with Google
+              </a>
+
               <form
                 className="mt-6 space-y-4"
                 onSubmit={async (e) => {
                   e.preventDefault();
-                  
-                  // Prevent double submission
-                  if (loading) {
-                    return;
-                  }
-                  
                   setTouched(true);
                   if (!formValid) return;
                   setLoading(true);
@@ -80,14 +83,9 @@ function LoginForm() {
                     
                     setToken(data.token);
                     setSuccess(true);
-                    // Redirect to redirect param, owner dashboard, or home
-                    const redirect = searchParams.get("redirect");
+                    // Redirect to owner dashboard
                     setTimeout(() => {
-                      if (redirect) {
-                        router.push(redirect);
-                      } else {
-                        window.location.href = "/owner-dashboard";
-                      }
+                      window.location.href = "/owner-dashboard";
                     }, 1200);
                   } catch (err: any) {
                     setError(err.message || "Login failed");
@@ -129,7 +127,7 @@ function LoginForm() {
                     <input type="checkbox" className="rounded border-slate-300" />
                     Remember me
                   </label>
-                  <Link href="/forgot-password" className="font-semibold text-brand-accent hover:underline">
+                  <Link href="#" className="font-semibold text-brand-accent hover:underline">
                     Forgot password?
                   </Link>
                 </div>
@@ -161,23 +159,5 @@ function LoginForm() {
       </main>
       <Footer />
     </>
-  );
-}
-
-export default function LoginPage() {
-  return (
-    <Suspense fallback={
-      <>
-        <Navbar />
-        <main className="bg-[#F7F7F7] min-h-screen pt-28 pb-16 flex items-center justify-center">
-          <div className="text-center">
-            <p className="text-sm text-slate-600">Loading...</p>
-          </div>
-        </main>
-        <Footer />
-      </>
-    }>
-      <LoginForm />
-    </Suspense>
   );
 }

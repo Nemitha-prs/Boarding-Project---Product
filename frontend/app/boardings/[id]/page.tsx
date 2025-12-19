@@ -4,29 +4,15 @@ import Image from "next/image";
 import Link from "next/link";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
-import { ErrorBoundary } from "@/components/ErrorBoundary";
-import dynamic from "next/dynamic";
-
-const SingleBoardingMap = dynamic(() => import("@/components/SingleBoardingMap"), {
-  ssr: false,
-  loading: () => (
-    <div className="flex h-56 w-full items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 text-sm text-slate-500">
-      Loading map...
-    </div>
-  ),
-});
+import MapView from "@/components/MapView";
 import Gallery from "@/components/Gallery";
 import BookmarkButton from "@/components/BookmarkButton";
-import ReviewSection from "@/components/ReviewSection";
 import { incrementView } from "@/utils/views";
 import { incrementPendingApprovals } from "@/utils/pendingApprovals";
-import { useEffect, useState, useRef, useMemo } from "react";
-import { useSearchParams } from "next/navigation";
+import { useEffect, useState, useRef } from "react";
 import { getApiUrl } from "@/lib/auth";
-import { apiCache } from "@/lib/cache";
 import type { BoardingListing } from "@/lib/fakeData";
 import { stringIdToNumeric } from "@/utils/idConverter";
-import { getReferenceCoordinate, getReferenceName, haversineKm } from "@/utils/distance";
 
 interface BoardingDetailsPageProps {
   params: {
@@ -86,45 +72,17 @@ function convertDbListingToBoarding(db: DbListing): BoardingListing {
 }
 
 export default function BoardingDetailsPage({ params }: BoardingDetailsPageProps) {
-  const searchParams = useSearchParams();
   const [listing, setListing] = useState<BoardingListing | null>(null);
   const [dbListing, setDbListing] = useState<DbListing | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const lastViewedId = useRef<string | null>(null);
 
-  // Get location selection from URL params
-  const selectedUniversity = searchParams.get("university");
-  const selectedDistrict = searchParams.get("district");
-  const selectedCity = searchParams.get("city");
-
-  // Calculate distance and location name
-  const distanceInfo = useMemo(() => {
-    if (!dbListing || dbListing.lat === null || dbListing.lng === null) {
-      return { distance: null, locationName: null };
-    }
-
-    const reference = getReferenceCoordinate(selectedUniversity, selectedDistrict, selectedCity);
-    if (!reference) {
-      return { distance: null, locationName: null };
-    }
-
-    const listingCoord = { lat: dbListing.lat, lng: dbListing.lng };
-    const distanceKm = haversineKm(reference, listingCoord);
-    const locationName = getReferenceName(selectedUniversity, selectedDistrict, selectedCity);
-
-    const distanceText = distanceKm < 1
-      ? `${(distanceKm * 1000).toFixed(0)} m`
-      : `${distanceKm.toFixed(1)} km`;
-
-    return { distance: distanceText, locationName };
-  }, [dbListing, selectedUniversity, selectedDistrict, selectedCity]);
-
   useEffect(() => {
     async function fetchListing() {
-      setLoading(true);
-      setError("");
       try {
+        setLoading(true);
+        setError("");
         
         // Parse the numeric ID from URL
         const numericId = parseInt(params.id, 10);
@@ -136,32 +94,21 @@ export default function BoardingDetailsPage({ params }: BoardingDetailsPageProps
           return;
         }
         
-        const cacheKey = `/listings/by-numeric-id/${numericId}`;
-        let listingWithOwner: DbListing;
-        
-        // Check cache first
-        const cached = apiCache.get<DbListing>(cacheKey);
-        if (cached) {
-          listingWithOwner = cached;
-        } else {
-          // Fetch the specific listing by numeric ID (single request)
-          const response = await fetch(getApiUrl(cacheKey));
-          if (!response.ok) {
-            if (response.status === 404) {
-              setError("Listing not found");
-            } else {
-              setError("Failed to load listing");
-            }
-            setListing(null);
-            setDbListing(null);
-            setLoading(false);
-            return;
+        // Fetch the specific listing by numeric ID (single request)
+        const response = await fetch(getApiUrl(`/listings/by-numeric-id/${numericId}`));
+        if (!response.ok) {
+          if (response.status === 404) {
+            setError("Listing not found");
+          } else {
+            setError("Failed to load listing");
           }
-          
-          listingWithOwner = await response.json();
-          // Cache for 60 seconds
-          apiCache.set(cacheKey, listingWithOwner, 60000);
+          setListing(null);
+          setDbListing(null);
+          setLoading(false);
+          return;
         }
+        
+        const listingWithOwner: DbListing = await response.json();
         
         // Verify the listing is Active
         if (listingWithOwner.status !== "Active") {
@@ -207,98 +154,81 @@ export default function BoardingDetailsPage({ params }: BoardingDetailsPageProps
     ? [listing.image, listing.image, listing.image]
     : [];
 
+  if (loading) {
+    return (
+      <>
+        <Navbar />
+        <main className="bg-[#F7F7F8] min-h-screen pt-28 pb-16 opacity-0 animate-[fadeIn_0.8s_ease-out_forwards]">
+          <div className="mx-auto max-w-3xl space-y-6 px-4 text-center sm:px-6 lg:px-8">
+            <p className="text-sm uppercase tracking-[0.3em] text-slate-400">Loading</p>
+            <h2 className="text-2xl font-semibold text-slate-900">Loading listing details...</h2>
+          </div>
+        </main>
+        <Footer />
+      </>
+    );
+  }
+
+  if (!listing || error) {
+    return (
+      <>
+        <Navbar />
+        <main className="bg-[#F7F7F8] min-h-screen pt-28 pb-16 opacity-0 animate-[fadeIn_0.8s_ease-out_forwards]">
+          <div className="mx-auto max-w-3xl space-y-6 px-4 text-center sm:px-6 lg:px-8">
+            <p className="text-sm uppercase tracking-[0.3em] text-slate-400">Not found</p>
+            <h2 className="text-2xl font-semibold text-slate-900">We could not find that boarding.</h2>
+            <Link
+              href="/boardings"
+              className="inline-flex items-center justify-center rounded-full bg-slate-900 px-6 py-3 text-sm font-semibold text-white shadow-sm transition-transform duration-150 hover:-translate-y-0.5"
+            >
+              Back to listings
+            </Link>
+          </div>
+        </main>
+        <Footer />
+      </>
+    );
+  }
+
   return (
-    <ErrorBoundary
-      fallback={
-        <div className="flex flex-col items-center justify-center min-h-screen p-8">
-          <p className="text-sm font-medium text-red-700 mb-2">Something went wrong</p>
-          <Link
-            href="/boardings"
-            className="mt-4 inline-flex items-center justify-center rounded-full bg-red-600 px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-red-700"
-          >
-            Back to Listings
-          </Link>
-        </div>
-      }
-    >
+    <>
       <Navbar />
       <main className="bg-[#F7F7F8] min-h-screen pt-28 pb-16 opacity-0 animate-[fadeIn_0.8s_ease-out_forwards]">
         <section className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8">
-          {!listing && error ? (
-            <div className="mx-auto max-w-3xl space-y-6 px-4 text-center sm:px-6 lg:px-8">
-              <p className="text-sm uppercase tracking-[0.3em] text-slate-400">Not found</p>
-              <h2 className="text-2xl font-semibold text-slate-900">We could not find that boarding.</h2>
-              <Link
-                href="/boardings"
-                className="inline-flex items-center justify-center rounded-full bg-slate-900 px-6 py-3 text-sm font-semibold text-white shadow-sm transition-transform duration-150 hover:-translate-y-0.5"
-              >
-                Back to listings
-              </Link>
+          <article className="overflow-hidden rounded-3xl bg-white shadow-sm ring-1 ring-gray-100">
+            <div className="border-b border-gray-100 bg-white/80 px-6 py-6 sm:px-8 sm:py-7">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.3em] text-slate-500">
+                    Listing #{listing.id}
+                  </p>
+                  <h2 className="mt-2 text-2xl font-semibold text-[#1F2937] sm:text-3xl">
+                    {listing.title}
+                  </h2>
+                  <p className="mt-1 text-sm text-slate-600">
+                    {listing.roomType} · {listing.distance} to campus
+                  </p>
+                </div>
+                {dbListing && <BookmarkButton listingId={dbListing.id} />}
+              </div>
             </div>
-          ) : !listing && loading ? (
-            <article className="overflow-hidden rounded-3xl bg-white shadow-sm ring-1 ring-gray-100">
-              <div className="border-b border-gray-100 bg-white/80 px-6 py-6 sm:px-8 sm:py-7">
-                <div className="flex items-start justify-between gap-4">
-                  <div className="flex-1">
-                    <div className="h-4 w-24 bg-slate-200 rounded animate-pulse mb-2" />
-                    <div className="h-8 w-3/4 bg-slate-200 rounded animate-pulse mb-2" />
-                    <div className="h-4 w-1/2 bg-slate-200 rounded animate-pulse" />
-                  </div>
-                </div>
-              </div>
-              <div className="grid gap-6 border-t border-gray-100 bg-white/90 p-6 md:grid-cols-[3fr,2fr] md:p-8">
-                <div className="space-y-5">
-                  <div className="aspect-video bg-slate-200 rounded-2xl animate-pulse" />
-                  <div className="h-32 bg-slate-200 rounded-2xl animate-pulse" />
-                </div>
-                <div className="space-y-4">
-                  <div className="h-48 bg-slate-200 rounded-2xl animate-pulse" />
-                </div>
-              </div>
-            </article>
-          ) : listing ? (
-            <>
-              <article className="overflow-hidden rounded-3xl bg-white shadow-sm ring-1 ring-gray-100">
-                <div className="border-b border-gray-100 bg-white/80 px-6 py-6 sm:px-8 sm:py-7">
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex-1">
-                      <p className="text-xs font-semibold uppercase tracking-[0.3em] text-slate-500">
-                        Listing #{listing.id}
-                      </p>
-                      <h2 className="mt-2 text-2xl font-semibold text-[#1F2937] sm:text-3xl">
-                        {listing.title || "Untitled Listing"}
-                      </h2>
-                      <p className="mt-1 text-sm text-slate-600">
-                        {listing.roomType || "Room type not specified"}
-                        {distanceInfo.distance && distanceInfo.locationName && (
-                          <> · {distanceInfo.distance} to {distanceInfo.locationName}</>
-                        )}
-                      </p>
-                    </div>
-                    {dbListing && <BookmarkButton listingId={dbListing.id} />}
-                  </div>
-                </div>
 
-                <div className="grid gap-6 border-t border-gray-100 bg-white/90 p-6 md:grid-cols-[3fr,2fr] md:p-8">
+            <div className="grid gap-6 border-t border-gray-100 bg-white/90 p-6 md:grid-cols-[3fr,2fr] md:p-8">
               <div className="space-y-5">
                 <Gallery images={galleryImages} title={listing.title} />
 
                 <section className="rounded-2xl border border-gray-100 bg-slate-50/80 p-5">
                   <h3 className="text-base font-semibold text-slate-900">Facilities</h3>
                   <ul className="mt-4 grid gap-2 sm:grid-cols-2">
-                    {Array.isArray(listing.facilities) && listing.facilities.length > 0 ? (
-                      listing.facilities.map((facility, idx) => (
-                        <li
-                          key={facility || idx}
-                          className="flex items-center gap-2 rounded-full bg-white px-3 py-2 text-sm text-slate-600 shadow-sm"
-                        >
-                          <span className="h-2 w-2 rounded-full bg-brand-accent" />
-                          {facility || "Facility"}
-                        </li>
-                      ))
-                    ) : (
-                      <li className="text-sm text-slate-500">No facilities listed</li>
-                    )}
+                    {listing.facilities.map((facility) => (
+                      <li
+                        key={facility}
+                        className="flex items-center gap-2 rounded-full bg-white px-3 py-2 text-sm text-slate-600 shadow-sm"
+                      >
+                        <span className="h-2 w-2 rounded-full bg-brand-accent" />
+                        {facility}
+                      </li>
+                    ))}
                   </ul>
                 </section>
               </div>
@@ -357,40 +287,24 @@ export default function BoardingDetailsPage({ params }: BoardingDetailsPageProps
                   )}
                 </section>
 
-                {dbListing && 
-                 typeof dbListing.lat === "number" && 
-                 typeof dbListing.lng === "number" && 
-                 !isNaN(dbListing.lat) && 
-                 !isNaN(dbListing.lng) &&
-                 dbListing.lat !== null && 
-                 dbListing.lng !== null && (
-                  <section className="rounded-2xl border border-dashed border-brand-accent/30 bg-white p-4">
-                    <SingleBoardingMap
-                      lat={dbListing.lat}
-                      lng={dbListing.lng}
-                      title={listing.title || "Boarding location"}
-                    />
-                  </section>
-                )}
+                <section className="rounded-2xl border border-dashed border-brand-accent/30 bg-white p-4 text-center text-sm text-slate-500">
+                  <MapView listings={[listing]} />
+                </section>
               </div>
             </div>
-            </article>
-            {listing && dbListing && (
-              <ReviewSection boardingId={dbListing.id} />
-            )}
-            <div className="mt-6 text-center">
-              <Link
-                href="/boardings"
-                className="inline-flex items-center justify-center rounded-full bg-slate-900 px-6 py-3 text-sm font-semibold text-white shadow-sm transition-transform duration-150 hover:-translate-y-0.5"
-              >
-                Back to listings
-              </Link>
-            </div>
-          </>
-          ) : null}
+          </article>
+
+          <div className="mt-6 text-center">
+            <Link
+              href="/boardings"
+              className="inline-flex items-center justify-center rounded-full bg-slate-900 px-6 py-3 text-sm font-semibold text-white shadow-sm transition-transform duration-150 hover:-translate-y-0.5"
+            >
+              Back to listings
+            </Link>
+          </div>
         </section>
       </main>
       <Footer />
-    </ErrorBoundary>
+    </>
   );
 }

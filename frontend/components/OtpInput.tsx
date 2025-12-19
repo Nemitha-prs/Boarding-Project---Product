@@ -108,14 +108,21 @@ export default function OtpInput({
         </p>
       </div>
 
-      {/* REMOVED duplicate resend button - parent handles resend */}
-      {countdown > 0 && (
-        <div className="text-center">
-          <p className="text-sm text-slate-500">
-            Resend available in <span className="font-mono font-semibold">{formatTime(countdown)}</span>
-          </p>
-        </div>
-      )}
+      <div className="flex items-center justify-between">
+        <button
+          type="button"
+          onClick={onResend}
+          disabled={resending || countdown > 0}
+          className="text-sm font-semibold text-brand-accent hover:underline disabled:text-slate-400 disabled:no-underline disabled:cursor-not-allowed transition-colors"
+        >
+          {resending ? "Sending..." : countdown > 0 ? `Resend in ${formatTime(countdown)}` : "Resend code"}
+        </button>
+        {countdown > 0 && (
+          <span className="text-sm text-slate-500 font-mono">
+            {formatTime(countdown)}
+          </span>
+        )}
+      </div>
 
       <button
         type="button"

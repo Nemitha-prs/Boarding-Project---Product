@@ -212,12 +212,6 @@ export default function EditOwnerListingPage() {
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
-    
-    // Prevent double submission
-    if (loading) {
-      return;
-    }
-    
     setHasSubmitted(true);
     if (!canSubmit || !item) return;
     

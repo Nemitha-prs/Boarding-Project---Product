@@ -8,42 +8,17 @@ import { sendEmailOTP } from "../services/email.js";
 const router = Router();
 const SALT_ROUNDS = 10;
 
-// In-memory OTP store with strict tracking
+// In-memory OTP store
 interface OTPStoreEntry {
   otp: string;
-  otp_created_at: number; // When OTP was generated
-  otp_expires_at: number; // When OTP expires (5 minutes)
-  last_otp_sent_at: number; // When OTP was last sent (for cooldown)
-  otp_attempts: number; // Verification attempts
-  otp_verified: boolean; // Whether OTP was successfully verified
+  expiresAt: number;
+  attempts: number;
+  verified: boolean;
 }
 
 const otpStore = new Map<string, OTPStoreEntry>();
 // Separate OTP store for password reset
 const passwordResetOtpStore = new Map<string, OTPStoreEntry>();
-
-// Helper function to clean up expired OTPs (optional, for memory management)
-function cleanupExpiredOTPs() {
-  const now = Date.now();
-  for (const [email, entry] of otpStore.entries()) {
-    if (now > entry.otp_expires_at) {
-      otpStore.delete(email);
-    }
-  }
-  for (const [email, entry] of passwordResetOtpStore.entries()) {
-    if (now > entry.otp_expires_at) {
-      passwordResetOtpStore.delete(email);
-    }
-  }
-}
-
-// Clean up expired OTPs every 10 minutes
-setInterval(cleanupExpiredOTPs, 10 * 60 * 1000);
-
-// OTP cooldown: 2 minutes (120 seconds) in milliseconds - STRICT
-const OTP_COOLDOWN_MS = 2 * 60 * 1000;
-const OTP_EXPIRY_MS = 5 * 60 * 1000; // 5 minutes
-const MAX_OTP_ATTEMPTS = 5; // Maximum verification attempts
 
 // Generate 6-digit OTP
 function generateOTP(): string {
@@ -101,57 +76,27 @@ router.post("/send-email-otp", async (req, res) => {
       return res.status(409).json({ error: "Email already registered" });
     }
 
-    // STRICT COOLDOWN CHECK - Must happen BEFORE any OTP generation
-    const existingEntry = otpStore.get(email);
-    const now = Date.now();
-    
-    if (existingEntry?.last_otp_sent_at) {
-      const timeSinceLastRequest = now - existingEntry.last_otp_sent_at;
-      if (timeSinceLastRequest < OTP_COOLDOWN_MS) {
-        const remainingSeconds = Math.ceil((OTP_COOLDOWN_MS - timeSinceLastRequest) / 1000);
-        return res.status(429).json({ 
-          success: false,
-          error: "Please wait 2 minutes before requesting another OTP",
-          cooldownSeconds: remainingSeconds,
-          message: `Please wait ${remainingSeconds} seconds before requesting another OTP`
-        });
-      }
-    }
-
-    // Generate NEW OTP only after cooldown check passes
+    // Generate OTP and store in memory
     const otp = generateOTP();
-    const otp_created_at = now;
-    const otp_expires_at = now + OTP_EXPIRY_MS;
+    const expiresAt = Date.now() + 5 * 60 * 1000; // 5 minutes
 
-    // Store OTP BEFORE sending email (so we have it even if email fails)
     otpStore.set(email, {
       otp,
-      otp_created_at,
-      otp_expires_at,
-      last_otp_sent_at: now,
-      otp_attempts: 0,
-      otp_verified: false,
+      expiresAt,
+      attempts: 0,
+      verified: false,
     });
 
-    // Send email - if this fails, OTP is still stored but user won't receive it
+    // Send email
     try {
       await sendEmailOTP(email, otp, name);
     } catch (emailError: any) {
       console.error("Failed to send email OTP:", emailError);
-      // Remove OTP if email failed - user can't verify what they didn't receive
       otpStore.delete(email);
-      return res.status(500).json({ 
-        success: false,
-        error: "Failed to send OTP email. Please try again." 
-      });
+      return res.status(500).json({ error: "Failed to send OTP email" });
     }
 
-    // ONLY return success if email was actually sent
-    return res.status(200).json({ 
-      success: true,
-      message: "OTP sent to email",
-      cooldownSeconds: 120
-    });
+    return res.json({ message: "OTP sent to email" });
   } catch (e: any) {
     console.error("Send OTP error:", e);
     return res.status(500).json({ error: "Failed to send verification code. Please try again." });
@@ -176,56 +121,30 @@ router.post("/verify-email-otp", async (req, res) => {
       return res.status(400).json({ error: "No OTP found. Please request a new code." });
     }
 
-    // Check if already verified
-    if (entry.otp_verified) {
-      return res.status(400).json({ 
-        success: false,
-        error: "OTP has already been verified. Please request a new code." 
-      });
-    }
-
-    // Check if expired
-    const now = Date.now();
-    if (now > entry.otp_expires_at) {
+    // Check expiry
+    if (Date.now() > entry.expiresAt) {
       otpStore.delete(email);
-      return res.status(400).json({ 
-        success: false,
-        error: "OTP expired. Please request a new code." 
-      });
+      return res.status(400).json({ error: "Verification code expired" });
     }
 
-    // Check attempt limit
-    if (entry.otp_attempts >= MAX_OTP_ATTEMPTS) {
+    // Check attempts
+    if (entry.attempts >= 5) {
       otpStore.delete(email);
-      return res.status(400).json({ 
-        success: false,
-        error: "Maximum verification attempts exceeded. Please request a new code." 
-      });
+      return res.status(400).json({ error: "Too many attempts. Please request a new code." });
     }
 
-    // Verify OTP - exact match required
+    // Verify OTP
     if (otp.trim() !== entry.otp.trim()) {
-      entry.otp_attempts++;
+      entry.attempts++;
       otpStore.set(email, entry);
-      const remainingAttempts = MAX_OTP_ATTEMPTS - entry.otp_attempts;
-      return res.status(400).json({ 
-        success: false,
-        error: `Invalid OTP. ${remainingAttempts} attempt(s) remaining.`,
-        remainingAttempts
-      });
+      return res.status(400).json({ error: "Incorrect verification code" });
     }
 
-    // OTP is correct - mark as verified
-    otpStore.set(email, { 
-      ...entry, 
-      otp_verified: true 
-    });
-    
-    return res.status(200).json({ 
-      success: true,
-      verified: true, 
-      message: "OTP verified successfully" 
-    });
+    // Success - mark as verified
+    entry.verified = true;
+    otpStore.set(email, entry);
+
+    return res.json({ verified: true, message: "Email verified successfully" });
   } catch (e: any) {
     console.error("Verify OTP error:", e);
     return res.status(500).json({ error: "Failed to verify code. Please try again." });
@@ -257,13 +176,10 @@ router.post("/register", async (req, res) => {
       return res.status(400).json({ error: "NIC is required" });
     }
 
-    // Check OTP verification - must be verified
+    // Check OTP verification
     const otpEntry = otpStore.get(email);
-    if (!otpEntry || !otpEntry.otp_verified) {
-      return res.status(400).json({ 
-        success: false,
-        error: "Email not verified. Please verify your email with OTP first." 
-      });
+    if (!otpEntry || !otpEntry.verified) {
+      return res.status(400).json({ error: "Email not verified. Please verify your email with OTP first." });
     }
 
     // Check if email already exists (owners only)
@@ -355,7 +271,7 @@ router.post("/login", async (req, res) => {
       return res.status(401).json({ error: "No account found. Please register first." });
     }
 
-    // Check if user has password
+    // Check if user has password (not Google OAuth only)
     if (!owner.passwordHash) {
       return res.status(401).json({ error: "Invalid email or password" });
     }
@@ -417,35 +333,15 @@ router.post("/forgot-password/send-otp", async (req, res) => {
       return res.status(404).json({ error: "Email is not registered" });
     }
 
-    // STRICT COOLDOWN CHECK for password reset
-    const existingEntry = passwordResetOtpStore.get(email);
-    const now = Date.now();
-    
-    if (existingEntry?.last_otp_sent_at) {
-      const timeSinceLastRequest = now - existingEntry.last_otp_sent_at;
-      if (timeSinceLastRequest < OTP_COOLDOWN_MS) {
-        const remainingSeconds = Math.ceil((OTP_COOLDOWN_MS - timeSinceLastRequest) / 1000);
-        return res.status(429).json({ 
-          success: false,
-          error: "Please wait 2 minutes before requesting another OTP",
-          cooldownSeconds: remainingSeconds,
-          message: `Please wait ${remainingSeconds} seconds before requesting another OTP`
-        });
-      }
-    }
-
-    // Generate NEW OTP only after cooldown check passes
+    // Email exists - generate and send OTP
     const otp = generateOTP();
-    const otp_created_at = now;
-    const otp_expires_at = now + (10 * 60 * 1000); // 10 minutes for password reset
+    const expiresAt = Date.now() + 10 * 60 * 1000; // 10 minutes
 
     passwordResetOtpStore.set(email, {
       otp,
-      otp_created_at,
-      otp_expires_at,
-      last_otp_sent_at: now,
-      otp_attempts: 0,
-      otp_verified: false,
+      expiresAt,
+      attempts: 0,
+      verified: false,
     });
 
     // Send email
@@ -482,56 +378,30 @@ router.post("/forgot-password/verify-otp", async (req, res) => {
       return res.status(400).json({ error: "No OTP found. Please request a new code." });
     }
 
-    // Check if already verified
-    if (entry.otp_verified) {
-      return res.status(400).json({ 
-        success: false,
-        error: "OTP has already been verified. Please request a new code." 
-      });
-    }
-
-    // Check if expired
-    const now = Date.now();
-    if (now > entry.otp_expires_at) {
+    // Check expiry
+    if (Date.now() > entry.expiresAt) {
       passwordResetOtpStore.delete(email);
-      return res.status(400).json({ 
-        success: false,
-        error: "OTP expired. Please request a new code." 
-      });
+      return res.status(400).json({ error: "Verification code expired" });
     }
 
-    // Check attempt limit
-    if (entry.otp_attempts >= MAX_OTP_ATTEMPTS) {
+    // Check attempts
+    if (entry.attempts >= 5) {
       passwordResetOtpStore.delete(email);
-      return res.status(400).json({ 
-        success: false,
-        error: "Maximum verification attempts exceeded. Please request a new code." 
-      });
+      return res.status(400).json({ error: "Too many attempts. Please request a new code." });
     }
 
-    // Verify OTP - exact match required
+    // Verify OTP
     if (otp.trim() !== entry.otp.trim()) {
-      entry.otp_attempts++;
+      entry.attempts++;
       passwordResetOtpStore.set(email, entry);
-      const remainingAttempts = MAX_OTP_ATTEMPTS - entry.otp_attempts;
-      return res.status(400).json({ 
-        success: false,
-        error: `Invalid OTP. ${remainingAttempts} attempt(s) remaining.`,
-        remainingAttempts
-      });
+      return res.status(400).json({ error: "Incorrect verification code" });
     }
 
-    // OTP is correct - mark as verified
-    passwordResetOtpStore.set(email, { 
-      ...entry, 
-      otp_verified: true 
-    });
-    
-    return res.status(200).json({ 
-      success: true,
-      verified: true, 
-      message: "OTP verified successfully" 
-    });
+    // Success - mark as verified
+    entry.verified = true;
+    passwordResetOtpStore.set(email, entry);
+
+    return res.json({ verified: true, message: "OTP verified successfully" });
   } catch (e: any) {
     console.error("Verify password reset OTP error:", e);
     return res.status(500).json({ error: "Failed to verify code. Please try again." });
@@ -557,32 +427,21 @@ router.post("/forgot-password/reset", async (req, res) => {
       return res.status(400).json({ error: "Password must be at least 6 characters" });
     }
 
-    // Check OTP verification - must be verified
+    // Check OTP verification
     const entry = passwordResetOtpStore.get(email);
-    const now = Date.now();
-    
-    if (!entry || !entry.otp_verified) {
-      return res.status(400).json({ 
-        success: false,
-        error: "OTP not verified. Please verify your OTP first." 
-      });
+    if (!entry || !entry.verified) {
+      return res.status(400).json({ error: "OTP not verified. Please verify your OTP first." });
     }
 
     // Verify OTP one more time before reset
     if (otp.trim() !== entry.otp.trim()) {
-      return res.status(400).json({ 
-        success: false,
-        error: "Invalid OTP" 
-      });
+      return res.status(400).json({ error: "Invalid OTP" });
     }
 
     // Check if OTP expired
-    if (now > entry.otp_expires_at) {
+    if (Date.now() > entry.expiresAt) {
       passwordResetOtpStore.delete(email);
-      return res.status(400).json({ 
-        success: false,
-        error: "OTP expired. Please request a new code." 
-      });
+      return res.status(400).json({ error: "OTP expired. Please request a new code." });
     }
 
     // Check if user exists
@@ -598,28 +457,13 @@ router.post("/forgot-password/reset", async (req, res) => {
       return res.status(404).json({ error: "User not found" });
     }
 
-    // Hash new password
-    const passwordHash = await bcrypt.hash(newPassword, SALT_ROUNDS);
-
-    // Update password
-    const { error: updateError } = await supabase
-      .from("users")
-      .update({ passwordHash })
-      .eq("id", user.id);
-
-    if (updateError) {
-      console.error("Error updating password:", updateError);
-      return res.status(500).json({ error: "Failed to reset password. Please try again." });
+      const token = jwt.sign({ id: owner.id }, ENV.JWT_SECRET, { expiresIn: "7d" });
+      return res.redirect(`${ENV.FRONTEND_URL}/owner-dashboard?token=${token}`);
+    } catch (error: any) {
+      console.error("Google OAuth callback error:", error);
+      return res.redirect(`${ENV.FRONTEND_URL}/login?error=oauth_error`);
     }
-
-    // Clear OTP from memory
-    passwordResetOtpStore.delete(email);
-
-    return res.json({ message: "Password reset successfully" });
-  } catch (e: any) {
-    console.error("Reset password error:", e);
-    return res.status(500).json({ error: "Failed to reset password. Please try again." });
   }
-});
+);
 
 export default router;
