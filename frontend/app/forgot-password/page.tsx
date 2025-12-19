@@ -1,5 +1,4 @@
 "use client";
-export const dynamic = "force-dynamic";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -7,6 +6,7 @@ import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import OtpInput from "@/components/OtpInput";
 import { getApiUrl } from "@/lib/auth";
+
 
 export default function ForgotPasswordPage() {
   const router = useRouter();

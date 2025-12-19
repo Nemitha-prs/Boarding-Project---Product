@@ -288,7 +288,20 @@ export default function BoardingDetailsPage({ params }: BoardingDetailsPageProps
                 </section>
 
                 <section className="rounded-2xl border border-dashed border-brand-accent/30 bg-white p-4 text-center text-sm text-slate-500">
-                  <MapView listings={[listing]} />
+                {dbListing?.lat && dbListing?.lng ? (
+  <MapView 
+    listings={[{
+      id: listing.id.toString(),
+      title: listing.title,
+      lat: dbListing.lat,
+      lng: dbListing.lng,
+      roomType: listing.roomType,
+      numericId: listing.id
+    }]} 
+  />
+) : (
+  <p className="py-8 text-slate-400">Location not available</p>
+)}
                 </section>
               </div>
             </div>
