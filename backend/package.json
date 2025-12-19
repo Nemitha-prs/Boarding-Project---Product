@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "start": "node dist/index.js",
-    "build": "tsc -p ."
+    "build": "tsc -p . && node fix-imports.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.0",
