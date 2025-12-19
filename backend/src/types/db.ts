@@ -32,7 +32,7 @@ export interface ListingRow {
   images: string[];
   rating: number;
   status: OwnerStatus;
-  pendingApprovals: number;
+  pendingApprovals?: number; // Optional - column may not exist in database
   createdAt: string;
   updatedAt: string;
 }

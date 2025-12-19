@@ -13,7 +13,7 @@ router.get("/", async (req, res) => {
   // Only select required fields to reduce payload size
   let query = supabase
     .from("listings")
-    .select("id, title, description, price, negotiable, boardingType, district, colomboArea, lat, lng, beds, bathrooms, facilities, images, status, createdAt, updatedAt, ownerId, pendingApprovals")
+    .select("id, title, description, price, negotiable, boardingType, district, colomboArea, lat, lng, beds, bathrooms, facilities, images, status, createdAt, updatedAt, ownerId")
     .order("createdAt", { ascending: false });
   
   if (ownerId) {
@@ -112,7 +112,7 @@ router.get("/by-numeric-id/:numericId", async (req, res) => {
   // Now fetch only the specific listing's full data (select specific fields)
   const { data: matchingListing, error: detailError } = await supabase
     .from("listings")
-    .select("id, title, description, price, negotiable, boardingType, district, colomboArea, lat, lng, beds, bathrooms, facilities, images, status, createdAt, updatedAt, ownerId, pendingApprovals")
+    .select("id, title, description, price, negotiable, boardingType, district, colomboArea, lat, lng, beds, bathrooms, facilities, images, status, createdAt, updatedAt, ownerId")
     .eq("id", matchingId.id)
     .single();
   
@@ -150,42 +150,10 @@ router.post("/:id/increment-pending-approvals", async (req, res) => {
     return res.json({ pendingApprovals: typeof rpcData === 'number' ? rpcData : (rpcData as any).pendingApprovals || 0 });
   }
   
-  // Fallback: if RPC function doesn't exist, use two-step approach (less ideal but works)
-  // This has a small race condition window but is acceptable as fallback
+  // Fallback: if RPC function doesn't exist, return error since column doesn't exist
   if (rpcError && (rpcError.message?.includes('function') || rpcError.message?.includes('does not exist'))) {
-    // Check if listing exists first
-    const { data: listing, error: checkErr } = await supabase
-      .from("listings")
-      .select("id, pendingApprovals")
-      .eq("id", id)
-      .single();
-    
-    if (checkErr || !listing) {
-      return res.status(404).json({ error: "Listing not found" });
-    }
-    
-    // Increment pending approvals
-    const currentCount = typeof listing.pendingApprovals === "number" ? listing.pendingApprovals : 0;
-    const { data: updated, error: updateError } = await supabase
-      .from("listings")
-      .update({ 
-        pendingApprovals: currentCount + 1,
-        updatedAt: new Date().toISOString()
-      })
-      .eq("id", id)
-      .select("pendingApprovals")
-      .single();
-    
-    if (updateError) {
-      if (updateError.message?.includes("pendingApprovals") || updateError.message?.includes("column")) {
-        return res.status(500).json({ 
-          error: "Database column 'pendingApprovals' does not exist. Please add it to the listings table." 
-        });
-      }
-      return res.status(500).json({ error: updateError.message });
-    }
-    
-    return res.json({ pendingApprovals: updated?.pendingApprovals || 0 });
+    // Column doesn't exist, return 0 as default
+    return res.json({ pendingApprovals: 0 });
   }
   
   // Handle other RPC errors
@@ -205,15 +173,10 @@ router.get("/:id", async (req, res) => {
   // Select only required fields
   const { data, error } = await supabase
     .from("listings")
-    .select("id, title, description, price, negotiable, boardingType, district, colomboArea, lat, lng, beds, bathrooms, facilities, images, status, createdAt, updatedAt, ownerId, pendingApprovals")
+    .select("id, title, description, price, negotiable, boardingType, district, colomboArea, lat, lng, beds, bathrooms, facilities, images, status, createdAt, updatedAt, ownerId")
     .eq("id", id)
     .single();
   if (error) return res.status(404).json({ error: "Listing not found" });
-  
-  // Ensure pendingApprovals exists (default to 0 if column doesn't exist)
-  if (data && typeof data.pendingApprovals !== "number") {
-    data.pendingApprovals = 0;
-  }
   
   // Also fetch owner info for contact details
   if (data?.ownerId) {
@@ -299,7 +262,7 @@ router.post("/", jwtMiddleware, requireOwner, async (req, res) => {
     updatedAt: now,
   };
 
-  const { data, error } = await supabase.from("listings").insert(insert).select("*").single();
+  const { data, error } = await supabase.from("listings").insert(insert).select("id, title, description, price, negotiable, boardingType, district, colomboArea, lat, lng, beds, bathrooms, facilities, images, status, createdAt, updatedAt, ownerId").single();
   if (error) {
     // Handle Supabase-specific errors
     const errorMessage = error.message?.toLowerCase() || "";
@@ -310,15 +273,8 @@ router.post("/", jwtMiddleware, requireOwner, async (req, res) => {
     if (errorMessage.includes("size") || errorMessage.includes("large") || errorMessage.includes("limit")) {
       return res.status(400).json({ error: "Image is too large. Please use images smaller than 5 MB." });
     }
-    // If error mentions pendingApprovals or schema cache, it's likely the column doesn't exist
-    // But since we're not including it in insert, this shouldn't happen unless SELECT * tries to get it
-    // The error is likely from SELECT * trying to fetch a non-existent column
     console.error("Database error:", error);
     return res.status(500).json({ error: "Failed to save listing. Please try again." });
-  }
-  // Ensure pendingApprovals exists in response (default to 0 if column doesn't exist)
-  if (data && typeof (data as any).pendingApprovals !== "number") {
-    (data as any).pendingApprovals = 0;
   }
   return res.status(201).json(data);
 });
@@ -386,7 +342,7 @@ router.patch("/:id", jwtMiddleware, requireOwner, async (req, res) => {
     .from("listings")
     .update(update)
     .eq("id", id)
-    .select("*")
+    .select("id, title, description, price, negotiable, boardingType, district, colomboArea, lat, lng, beds, bathrooms, facilities, images, status, createdAt, updatedAt, ownerId")
     .single();
   if (error) {
     // Handle Supabase-specific errors
@@ -425,7 +381,7 @@ router.patch("/:id/status", jwtMiddleware, requireOwner, async (req, res) => {
     .from("listings")
     .update({ status, updatedAt: new Date().toISOString() })
     .eq("id", id)
-    .select("*")
+    .select("id, title, description, price, negotiable, boardingType, district, colomboArea, lat, lng, beds, bathrooms, facilities, images, status, createdAt, updatedAt, ownerId")
     .single();
   if (error) return res.status(500).json({ error: error.message });
   return res.json(data);
