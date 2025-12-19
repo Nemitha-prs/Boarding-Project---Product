@@ -457,7 +457,7 @@ router.post("/forgot-password/reset", async (req, res) => {
       return res.status(404).json({ error: "User not found" });
     }
 
-      const token = jwt.sign({ id: owner.id }, ENV.JWT_SECRET, { expiresIn: "7d" });
+      const token = jwt.sign({ id: user.id }, ENV.JWT_SECRET, { expiresIn: "7d" });
       return res.redirect(`${ENV.FRONTEND_URL}/owner-dashboard?token=${token}`);
     } catch (error: any) {
       console.error("Google OAuth callback error:", error);
