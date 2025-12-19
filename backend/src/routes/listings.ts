@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { supabase } from "../supabase";
+import { supabase } from "../supabase.js";
 import type { ListingRow, OwnerStatus } from "../types/db";
 import { jwtMiddleware, requireOwner } from "../middleware/auth";
 
