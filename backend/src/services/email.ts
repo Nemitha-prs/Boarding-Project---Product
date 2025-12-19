@@ -1,7 +1,7 @@
 // Email service for sending OTP codes
 
 import nodemailer from "nodemailer";
-import { ENV } from "../env";
+import { ENV } from "../env.js";
 
 /**
  * Create and verify Nodemailer transporter

@@ -1,9 +1,9 @@
 import { Router } from "express";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
-import { supabase } from "../supabase";
-import { ENV } from "../env";
-import { sendEmailOTP } from "../services/email";
+import { supabase } from "../supabase.js";
+import { ENV } from "../env.js";
+import { sendEmailOTP } from "../services/email.js";
 
 const router = Router();
 const SALT_ROUNDS = 10;
