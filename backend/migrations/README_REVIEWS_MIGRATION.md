@@ -40,3 +40,4 @@ Backend/migrations/create_reviews_table.sql
 - After running the migration, wait a few seconds for Supabase to update its schema cache
 
 
+

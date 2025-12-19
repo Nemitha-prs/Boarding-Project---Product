@@ -169,3 +169,4 @@ This Privacy Policy is governed by the laws of Sri Lanka. Any disputes will be r
 *This Privacy Policy is effective as of [DATE] and applies to all users of AnexLK.*
 
 
+
