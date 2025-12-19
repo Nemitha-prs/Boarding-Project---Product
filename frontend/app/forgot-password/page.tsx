@@ -21,6 +21,9 @@ export default function ForgotPasswordPage() {
   const [countdown, setCountdown] = useState(0);
   const [isTimerActive, setIsTimerActive] = useState(false);
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
+  
+  // Ref to prevent race conditions - tracks if request is in flight
+  const otpRequestInFlight = useRef(false);
 
   // Countdown timer
   useEffect(() => {
@@ -73,11 +76,21 @@ export default function ForgotPasswordPage() {
   };
 
   const handleSendOTP = async () => {
+    // Early validation - return BEFORE setting loading state
     if (!emailIsValid(email)) {
       setError("Please enter a valid email address");
       return;
     }
 
+    // Prevent double-click: use ref for immediate check (not dependent on React state)
+    if (otpRequestInFlight.current) {
+      return;
+    }
+
+    // Mark request as in flight IMMEDIATELY (synchronous)
+    otpRequestInFlight.current = true;
+
+    // Set loading state BEFORE making request
     setSending(true);
     setError("");
     setSuccess("");
@@ -97,21 +110,28 @@ export default function ForgotPasswordPage() {
           setCountdown(cooldownSeconds);
           setIsTimerActive(true);
           setError(data.error || "Please wait before requesting another OTP");
+          setSending(false);
+          otpRequestInFlight.current = false;
           return;
         }
         throw new Error(data.error || "Failed to send OTP");
       }
 
+      // Backend confirmed OTP was sent - now update UI state
+      const data = await res.json().catch(() => ({}));
+      
       setSuccess("OTP sent to your email");
       setStep("otp");
       setIsTimerActive(true);
       setCountdown(120); // 2 minutes cooldown
       setOtp(["", "", "", "", "", ""]);
       inputRefs.current[0]?.focus();
+      setSending(false);
+      otpRequestInFlight.current = false;
     } catch (err: any) {
       setError(err.message || "Failed to send OTP");
-    } finally {
       setSending(false);
+      otpRequestInFlight.current = false;
     }
   };
 
