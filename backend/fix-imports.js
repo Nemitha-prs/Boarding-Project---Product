@@ -15,3 +15,4 @@ content = content.replace(/from ['"]\.\/(routes\/[^'"]+)['"]/g, "from './$1.js'"
 fs.writeFileSync(distIndexPath, content);
 console.log('Fixed imports in dist/index.js');
 
+
