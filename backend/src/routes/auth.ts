@@ -8,21 +8,125 @@ import { sendEmailOTP } from "../services/email.js";
 const router = Router();
 const SALT_ROUNDS = 10;
 
-// In-memory OTP store
-interface OTPStoreEntry {
-  otp: string;
-  expiresAt: number;
-  attempts: number;
-  verified: boolean;
-}
-
-const otpStore = new Map<string, OTPStoreEntry>();
-// Separate OTP store for password reset
-const passwordResetOtpStore = new Map<string, OTPStoreEntry>();
+// OTP configuration
+const OTP_COOLDOWN_MS = 2 * 60 * 1000; // 2 minutes
+const OTP_EXPIRY_MS = 5 * 60 * 1000; // 5 minutes for registration
+const OTP_PASSWORD_RESET_EXPIRY_MS = 10 * 60 * 1000; // 10 minutes for password reset
+const MAX_OTP_ATTEMPTS = 5;
 
 // Generate 6-digit OTP
 function generateOTP(): string {
   return Math.floor(100000 + Math.random() * 900000).toString();
+}
+
+// Helper: Check if OTP can be sent (cooldown check)
+async function canSendOTP(email: string, purpose: "register" | "forgot_password"): Promise<{ allowed: boolean; remainingSeconds?: number }> {
+  const { data: existing } = await supabase
+    .from("email_otps")
+    .select("last_sent_at")
+    .eq("email", email)
+    .eq("purpose", purpose)
+    .maybeSingle();
+
+  if (!existing || !existing.last_sent_at) {
+    return { allowed: true };
+  }
+
+  const lastSent = new Date(existing.last_sent_at).getTime();
+  const now = Date.now();
+  const elapsed = now - lastSent;
+
+  if (elapsed < OTP_COOLDOWN_MS) {
+    const remainingSeconds = Math.ceil((OTP_COOLDOWN_MS - elapsed) / 1000);
+    return { allowed: false, remainingSeconds };
+  }
+
+  return { allowed: true };
+}
+
+// Helper: Create or update OTP in database
+async function upsertOTP(email: string, otp: string, purpose: "register" | "forgot_password", expiresAt: Date): Promise<void> {
+  const { error } = await supabase
+    .from("email_otps")
+    .upsert({
+      email,
+      otp,
+      purpose,
+      expires_at: expiresAt.toISOString(),
+      last_sent_at: new Date().toISOString(),
+      attempts: 0,
+      verified: false,
+    }, {
+      onConflict: "email,purpose",
+    });
+
+  if (error) {
+    console.error("Failed to upsert OTP:", error);
+    throw new Error("Failed to store OTP");
+  }
+}
+
+// Helper: Get OTP from database
+async function getOTP(email: string, purpose: "register" | "forgot_password") {
+  const { data, error } = await supabase
+    .from("email_otps")
+    .select("*")
+    .eq("email", email)
+    .eq("purpose", purpose)
+    .maybeSingle();
+
+  if (error) {
+    console.error("Failed to get OTP:", error);
+    throw new Error("Failed to retrieve OTP");
+  }
+
+  return data;
+}
+
+// Helper: Increment OTP attempts
+async function incrementOTPAttempts(email: string, purpose: "register" | "forgot_password"): Promise<void> {
+  const { error } = await supabase
+    .rpc("increment_otp_attempts", { p_email: email, p_purpose: purpose })
+    .single();
+
+  // If RPC doesn't exist, do manual update
+  if (error) {
+    const otp = await getOTP(email, purpose);
+    if (otp) {
+      await supabase
+        .from("email_otps")
+        .update({ attempts: otp.attempts + 1 })
+        .eq("email", email)
+        .eq("purpose", purpose);
+    }
+  }
+}
+
+// Helper: Mark OTP as verified
+async function markOTPVerified(email: string, purpose: "register" | "forgot_password"): Promise<void> {
+  const { error } = await supabase
+    .from("email_otps")
+    .update({ verified: true })
+    .eq("email", email)
+    .eq("purpose", purpose);
+
+  if (error) {
+    console.error("Failed to mark OTP as verified:", error);
+    throw new Error("Failed to verify OTP");
+  }
+}
+
+// Helper: Delete OTP
+async function deleteOTP(email: string, purpose: "register" | "forgot_password"): Promise<void> {
+  const { error } = await supabase
+    .from("email_otps")
+    .delete()
+    .eq("email", email)
+    .eq("purpose", purpose);
+
+  if (error) {
+    console.error("Failed to delete OTP:", error);
+  }
 }
 
 // GET /auth/check-email - Check if email exists (for owners only)
@@ -47,7 +151,7 @@ router.get("/check-email", async (req, res) => {
   }
 });
 
-// POST /auth/send-email-otp - Send OTP to email (in-memory store)
+// POST /auth/send-email-otp - Send OTP to email (database-backed with cooldown)
 router.post("/send-email-otp", async (req, res) => {
   try {
     const { email, name } = req.body;
@@ -76,23 +180,33 @@ router.post("/send-email-otp", async (req, res) => {
       return res.status(409).json({ error: "Email already registered" });
     }
 
-    // Generate OTP and store in memory
-    const otp = generateOTP();
-    const expiresAt = Date.now() + 5 * 60 * 1000; // 5 minutes
+    // Check cooldown (2 minutes)
+    const cooldownCheck = await canSendOTP(email, "register");
+    if (!cooldownCheck.allowed) {
+      return res.status(429).json({
+        error: "Please wait before requesting another code",
+        cooldownSeconds: cooldownCheck.remainingSeconds,
+      });
+    }
 
-    otpStore.set(email, {
-      otp,
-      expiresAt,
-      attempts: 0,
-      verified: false,
-    });
+    // Generate OTP
+    const otp = generateOTP();
+    const expiresAt = new Date(Date.now() + OTP_EXPIRY_MS);
+
+    // Store OTP in database (upsert to update if exists)
+    try {
+      await upsertOTP(email, otp, "register", expiresAt);
+    } catch (dbError: any) {
+      console.error("Failed to store OTP:", dbError);
+      return res.status(500).json({ error: "Failed to generate verification code. Please try again." });
+    }
 
     // Send email
     try {
       await sendEmailOTP(email, otp, name);
     } catch (emailError: any) {
       console.error("Failed to send email OTP:", emailError);
-      otpStore.delete(email);
+      // Don't delete OTP - let it expire naturally
       return res.status(500).json({ error: "Failed to send OTP email" });
     }
 
@@ -103,7 +217,7 @@ router.post("/send-email-otp", async (req, res) => {
   }
 });
 
-// POST /auth/verify-email-otp - Verify OTP (in-memory store with attempt tracking)
+// POST /auth/verify-email-otp - Verify OTP (database-backed with attempt tracking)
 router.post("/verify-email-otp", async (req, res) => {
   try {
     const { email, otp } = req.body;
@@ -114,35 +228,40 @@ router.post("/verify-email-otp", async (req, res) => {
       return res.status(400).json({ error: "otp is required" });
     }
 
-    const entry = otpStore.get(email);
+    // Get OTP from database
+    const entry = await getOTP(email, "register");
 
     // No OTP found
     if (!entry) {
       return res.status(400).json({ error: "No OTP found. Please request a new code." });
     }
 
+    // Check if already verified
+    if (entry.verified) {
+      return res.status(400).json({ error: "OTP already verified" });
+    }
+
     // Check expiry
-    if (Date.now() > entry.expiresAt) {
-      otpStore.delete(email);
+    const expiresAt = new Date(entry.expires_at).getTime();
+    if (Date.now() > expiresAt) {
+      await deleteOTP(email, "register");
       return res.status(400).json({ error: "Verification code expired" });
     }
 
     // Check attempts
-    if (entry.attempts >= 5) {
-      otpStore.delete(email);
+    if (entry.attempts >= MAX_OTP_ATTEMPTS) {
+      await deleteOTP(email, "register");
       return res.status(400).json({ error: "Too many attempts. Please request a new code." });
     }
 
     // Verify OTP
     if (otp.trim() !== entry.otp.trim()) {
-      entry.attempts++;
-      otpStore.set(email, entry);
+      await incrementOTPAttempts(email, "register");
       return res.status(400).json({ error: "Incorrect verification code" });
     }
 
     // Success - mark as verified
-    entry.verified = true;
-    otpStore.set(email, entry);
+    await markOTPVerified(email, "register");
 
     return res.json({ verified: true, message: "Email verified successfully" });
   } catch (e: any) {
@@ -176,8 +295,8 @@ router.post("/register", async (req, res) => {
       return res.status(400).json({ error: "NIC is required" });
     }
 
-    // Check OTP verification
-    const otpEntry = otpStore.get(email);
+    // Check OTP verification from database
+    const otpEntry = await getOTP(email, "register");
     if (!otpEntry || !otpEntry.verified) {
       return res.status(400).json({ error: "Email not verified. Please verify your email with OTP first." });
     }
@@ -224,8 +343,8 @@ router.post("/register", async (req, res) => {
       return res.status(500).json({ error: error.message });
     }
 
-    // Clear OTP from memory
-    otpStore.delete(email);
+    // Clear OTP from database
+    await deleteOTP(email, "register");
 
     // Generate JWT
     const token = jwt.sign({ id: data.id }, ENV.JWT_SECRET, { expiresIn: "7d" });
@@ -300,7 +419,7 @@ router.post("/login", async (req, res) => {
   }
 });
 
-// POST /auth/forgot-password/send-otp - Send OTP for password reset
+// POST /auth/forgot-password/send-otp - Send OTP for password reset (database-backed with cooldown)
 router.post("/forgot-password/send-otp", async (req, res) => {
   try {
     const { email } = req.body;
@@ -333,23 +452,33 @@ router.post("/forgot-password/send-otp", async (req, res) => {
       return res.status(404).json({ error: "Email is not registered" });
     }
 
-    // Email exists - generate and send OTP
-    const otp = generateOTP();
-    const expiresAt = Date.now() + 10 * 60 * 1000; // 10 minutes
+    // Check cooldown (2 minutes)
+    const cooldownCheck = await canSendOTP(email, "forgot_password");
+    if (!cooldownCheck.allowed) {
+      return res.status(429).json({
+        error: "Please wait before requesting another code",
+        cooldownSeconds: cooldownCheck.remainingSeconds,
+      });
+    }
 
-    passwordResetOtpStore.set(email, {
-      otp,
-      expiresAt,
-      attempts: 0,
-      verified: false,
-    });
+    // Generate OTP
+    const otp = generateOTP();
+    const expiresAt = new Date(Date.now() + OTP_PASSWORD_RESET_EXPIRY_MS);
+
+    // Store OTP in database (upsert to update if exists)
+    try {
+      await upsertOTP(email, otp, "forgot_password", expiresAt);
+    } catch (dbError: any) {
+      console.error("Failed to store OTP:", dbError);
+      return res.status(500).json({ error: "Failed to generate verification code. Please try again." });
+    }
 
     // Send email
     try {
       await sendEmailOTP(email, otp, existingUser.name || "User", true);
     } catch (emailError: any) {
       console.error("Failed to send password reset OTP email:", emailError);
-      passwordResetOtpStore.delete(email);
+      // Don't delete OTP - let it expire naturally
       return res.status(500).json({ error: "Failed to send OTP email" });
     }
 
@@ -360,7 +489,7 @@ router.post("/forgot-password/send-otp", async (req, res) => {
   }
 });
 
-// POST /auth/forgot-password/verify-otp - Verify OTP for password reset
+// POST /auth/forgot-password/verify-otp - Verify OTP for password reset (database-backed)
 router.post("/forgot-password/verify-otp", async (req, res) => {
   try {
     const { email, otp } = req.body;
@@ -371,35 +500,40 @@ router.post("/forgot-password/verify-otp", async (req, res) => {
       return res.status(400).json({ error: "otp is required" });
     }
 
-    const entry = passwordResetOtpStore.get(email);
+    // Get OTP from database
+    const entry = await getOTP(email, "forgot_password");
 
     // No OTP found
     if (!entry) {
       return res.status(400).json({ error: "No OTP found. Please request a new code." });
     }
 
+    // Check if already verified
+    if (entry.verified) {
+      return res.status(400).json({ error: "OTP already verified" });
+    }
+
     // Check expiry
-    if (Date.now() > entry.expiresAt) {
-      passwordResetOtpStore.delete(email);
+    const expiresAt = new Date(entry.expires_at).getTime();
+    if (Date.now() > expiresAt) {
+      await deleteOTP(email, "forgot_password");
       return res.status(400).json({ error: "Verification code expired" });
     }
 
     // Check attempts
-    if (entry.attempts >= 5) {
-      passwordResetOtpStore.delete(email);
+    if (entry.attempts >= MAX_OTP_ATTEMPTS) {
+      await deleteOTP(email, "forgot_password");
       return res.status(400).json({ error: "Too many attempts. Please request a new code." });
     }
 
     // Verify OTP
     if (otp.trim() !== entry.otp.trim()) {
-      entry.attempts++;
-      passwordResetOtpStore.set(email, entry);
+      await incrementOTPAttempts(email, "forgot_password");
       return res.status(400).json({ error: "Incorrect verification code" });
     }
 
     // Success - mark as verified
-    entry.verified = true;
-    passwordResetOtpStore.set(email, entry);
+    await markOTPVerified(email, "forgot_password");
 
     return res.json({ verified: true, message: "OTP verified successfully" });
   } catch (e: any) {
@@ -427,8 +561,8 @@ router.post("/forgot-password/reset", async (req, res) => {
       return res.status(400).json({ error: "Password must be at least 6 characters" });
     }
 
-    // Check OTP verification
-    const entry = passwordResetOtpStore.get(email);
+    // Check OTP verification from database
+    const entry = await getOTP(email, "forgot_password");
     if (!entry || !entry.verified) {
       return res.status(400).json({ error: "OTP not verified. Please verify your OTP first." });
     }
@@ -439,8 +573,9 @@ router.post("/forgot-password/reset", async (req, res) => {
     }
 
     // Check if OTP expired
-    if (Date.now() > entry.expiresAt) {
-      passwordResetOtpStore.delete(email);
+    const expiresAt = new Date(entry.expires_at).getTime();
+    if (Date.now() > expiresAt) {
+      await deleteOTP(email, "forgot_password");
       return res.status(400).json({ error: "OTP expired. Please request a new code." });
     }
 
@@ -457,13 +592,28 @@ router.post("/forgot-password/reset", async (req, res) => {
       return res.status(404).json({ error: "User not found" });
     }
 
-      const token = jwt.sign({ id: user.id }, ENV.JWT_SECRET, { expiresIn: "7d" });
-      return res.redirect(`${ENV.FRONTEND_URL}/owner-dashboard?token=${token}`);
-    } catch (error: any) {
-      console.error("Google OAuth callback error:", error);
-      return res.redirect(`${ENV.FRONTEND_URL}/login?error=oauth_error`);
+    // Hash the new password
+    const passwordHash = await bcrypt.hash(newPassword, SALT_ROUNDS);
+
+    // Update user's password
+    const { error: updateError } = await supabase
+      .from("users")
+      .update({ passwordHash })
+      .eq("id", user.id);
+
+    if (updateError) {
+      console.error("Failed to update password:", updateError);
+      return res.status(500).json({ error: "Failed to reset password. Please try again." });
     }
+
+    // Clear OTP from database
+    await deleteOTP(email, "forgot_password");
+
+    return res.json({ message: "Password reset successfully" });
+  } catch (e: any) {
+    console.error("Reset password error:", e);
+    return res.status(500).json({ error: "Failed to reset password. Please try again." });
   }
-);
+});
 
 export default router;

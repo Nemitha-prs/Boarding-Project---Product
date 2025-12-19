@@ -1,11 +1,11 @@
 import express from "express";
 import cors from "cors";
-import { ENV } from "./env";
+import { ENV } from "./env.js";
 
-import authRoutes from "./routes/auth";
-import listingsRoutes from "./routes/listings";
-import bookmarksRoutes from "./routes/bookmarks";
-import dbTestRoute from "./routes/dbTest";
+import authRoutes from "./routes/auth.js";
+import listingsRoutes from "./routes/listings.js";
+import bookmarksRoutes from "./routes/bookmarks.js";
+import dbTestRoute from "./routes/dbTest.js";
 
 const app = express();
 
@@ -13,7 +13,6 @@ const app = express();
 app.use(cors());
 app.use(express.json({ limit: "5mb" }));
 app.use(express.urlencoded({ extended: true, limit: "5mb" }));
-
 
 // Health check
 app.get("/health", (_req, res) => res.json({ ok: true }));

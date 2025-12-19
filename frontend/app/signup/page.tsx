@@ -258,6 +258,11 @@ export default function SignupPage() {
       return;
     }
 
+    // Prevent double-click - disable immediately
+    if (otpSending) {
+      return;
+    }
+
     setOtpSending(true);
     setError("");
 
@@ -275,12 +280,20 @@ export default function SignupPage() {
           setEmailExists(true);
           return;
         }
+        if (res.status === 429) {
+          // Cooldown active - set countdown from server response
+          const cooldownSeconds = data.cooldownSeconds || 120;
+          setOtpCountdown(cooldownSeconds);
+          setOtpSent(true); // Show OTP input even during cooldown
+          setError(data.error || "Please wait before requesting another code.");
+          return;
+        }
         throw new Error(data.error || "Failed to send OTP");
       }
 
       // CRITICAL: Set otpSent to true IMMEDIATELY after successful API call
       setOtpSent(true);
-      setOtpCountdown(300);
+      setOtpCountdown(120); // 2 minutes cooldown
       setOtp(["", "", "", "", "", ""]);
       setError("");
     } catch (err: any) {
@@ -542,10 +555,10 @@ export default function SignupPage() {
                     <button
                       type="button"
                       onClick={(e) => handleSendOtp(e)}
-                      disabled={!emailIsValid(email) || otpSending || otpVerified || !name.trim() || emailExists || checkingEmail}
+                      disabled={!emailIsValid(email) || otpSending || otpVerified || !name.trim() || emailExists || checkingEmail || (otpSent && otpCountdown > 0)}
                       className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60 whitespace-nowrap min-w-[100px]"
                     >
-                      {otpSending ? "Sending..." : otpVerified ? "✓ Verified" : "Send OTP"}
+                      {otpSending ? "Sending..." : otpVerified ? "✓ Verified" : otpSent && otpCountdown > 0 ? `${Math.ceil(otpCountdown / 60)}:${String(otpCountdown % 60).padStart(2, '0')}` : "Send OTP"}
                     </button>
                   </div>
                   {touched.email && errors.email && (
