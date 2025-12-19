@@ -12,6 +12,24 @@ export default function BoardingLocationMap({ lat, lng, onSelect }: BoardingLoca
   const mapRef = useRef<HTMLDivElement>(null);
   const [mapInstance, setMapInstance] = useState<any>(null);
   const [marker, setMarker] = useState<any>(null);
+  const onSelectRef = useRef(onSelect);
+  const initialLatRef = useRef(lat);
+  const initialLngRef = useRef(lng);
+
+  // Keep onSelect ref updated
+  useEffect(() => {
+    onSelectRef.current = onSelect;
+  }, [onSelect]);
+
+  // Keep initial lat/lng refs updated (only on first render)
+  useEffect(() => {
+    if (initialLatRef.current === null && lat !== null) {
+      initialLatRef.current = lat;
+    }
+    if (initialLngRef.current === null && lng !== null) {
+      initialLngRef.current = lng;
+    }
+  }, [lat, lng]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -30,9 +48,9 @@ export default function BoardingLocationMap({ lat, lng, onSelect }: BoardingLoca
 
       if (!mapRef.current) return;
 
-      // Initialize map
-      const defaultLat = lat || 6.9271;
-      const defaultLng = lng || 79.8612;
+      // Initialize map with initial values
+      const defaultLat = initialLatRef.current ?? 6.9271;
+      const defaultLng = initialLngRef.current ?? 79.8612;
 
       const map = L.map(mapRef.current).setView([defaultLat, defaultLng], 13);
 
@@ -46,13 +64,13 @@ export default function BoardingLocationMap({ lat, lng, onSelect }: BoardingLoca
       // Handle marker drag
       newMarker.on("dragend", () => {
         const position = newMarker.getLatLng();
-        onSelect(position.lat, position.lng);
+        onSelectRef.current(position.lat, position.lng);
       });
 
       // Handle map click
       map.on("click", (e: any) => {
         newMarker.setLatLng(e.latlng);
-        onSelect(e.latlng.lat, e.latlng.lng);
+        onSelectRef.current(e.latlng.lat, e.latlng.lng);
       });
 
       setMapInstance(map);
@@ -66,11 +84,11 @@ export default function BoardingLocationMap({ lat, lng, onSelect }: BoardingLoca
         mapInstance.remove();
       }
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Update marker position when lat/lng props change
-  // Update marker position when lat/lng props change
-useEffect(() => {
+  useEffect(() => {
     if (marker && lat !== null && lng !== null) {
       marker.setLatLng([lat, lng]);
       if (mapInstance) {

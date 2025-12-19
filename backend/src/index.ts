@@ -1,11 +1,11 @@
 import express from "express";
 import cors from "cors";
-import { ENV } from "./env.js";
+import { ENV } from "./env";
 
 import authRoutes from "./routes/auth";
-import listingsRoutes from "./routes/listings.js";
-import bookmarksRoutes from "./routes/bookmarks.js";
-import dbTestRoute from "./routes/dbTest.js";
+import listingsRoutes from "./routes/listings";
+import bookmarksRoutes from "./routes/bookmarks";
+import dbTestRoute from "./routes/dbTest";
 
 const app = express();
 
