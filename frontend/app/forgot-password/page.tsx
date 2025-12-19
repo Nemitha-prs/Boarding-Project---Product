@@ -292,7 +292,7 @@ export default function ForgotPasswordPage() {
                     {/* OTP Input Fields - 6 individual inputs */}
                     <div>
                       <label className="block text-sm font-medium text-slate-700 mb-3 text-center">
-                        Enter verification code
+                        Enter OTP
                       </label>
                       <div className="flex justify-center gap-2">
                         {[0, 1, 2, 3, 4, 5].map((index) => (
