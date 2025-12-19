@@ -16,6 +16,9 @@ interface DbListing {
   lng: number | null;
   boardingType?: string;
   status: "Active" | "Not-active";
+  price?: number;
+  district?: string;
+  colomboArea?: string | null;
 }
 
 export default function BoardingsMapPage() {
@@ -26,6 +29,8 @@ export default function BoardingsMapPage() {
     lng: number | null;
     roomType?: string;
     numericId?: number;
+    price?: number;
+    location?: string;
   }>>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -63,6 +68,8 @@ export default function BoardingsMapPage() {
           lng: listing.lng,
           roomType: listing.boardingType,
           numericId: stringIdToNumeric(listing.id),
+          price: listing.price,
+          location: listing.colomboArea || listing.district || undefined,
         }));
         setListings(mapListings);
       } catch (err: any) {

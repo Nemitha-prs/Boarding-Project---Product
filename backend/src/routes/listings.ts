@@ -35,13 +35,13 @@ router.get("/", async (req, res) => {
   return res.json(data ?? []);
 });
 
-// GET /listings/map (public) - minimal data for map view (id, lat, lng only)
+// GET /listings/map (public) - minimal data for map view (id, lat, lng, price, location)
 router.get("/map", async (req, res) => {
   const status = req.query.status as string | undefined;
   
   let query = supabase
     .from("listings")
-    .select("id, title, lat, lng, boardingType, status")
+    .select("id, title, lat, lng, boardingType, status, price, district, colomboArea")
     .not("lat", "is", null)
     .not("lng", "is", null);
   

@@ -12,6 +12,8 @@ interface MapViewProps {
     lng: number | null;
     roomType?: string;
     numericId?: number;
+    price?: number;
+    location?: string;
   }>;
 }
 
@@ -38,6 +40,8 @@ function MapViewContent({ listings }: MapViewProps) {
       lng: number;
       roomType?: string;
       numericId?: number;
+      price?: number;
+      location?: string;
     }>;
   }, [listings]);
 
@@ -122,21 +126,64 @@ function MapViewContent({ listings }: MapViewProps) {
             position={{ lat: selectedListingData.lat, lng: selectedListingData.lng }}
             onCloseClick={() => setSelectedListing(null)}
           >
-            <div className="p-2 min-w-[200px]">
-              <h3 className="text-sm font-semibold text-slate-900 mb-1">{selectedListingData.title}</h3>
-              {selectedListingData.roomType && (
-                <p className="text-xs text-slate-600 mb-2">{selectedListingData.roomType}</p>
-              )}
-              {selectedListingData.numericId && (
-                <button
-                  onClick={() => {
-                    router.push(`/boardings/${selectedListingData.numericId}`);
-                  }}
-                  className="w-full mt-2 px-3 py-1.5 text-xs font-medium text-white bg-slate-900 rounded-md hover:bg-slate-800 transition-colors"
-                >
-                  View Boarding
-                </button>
-              )}
+            <div className="p-0 min-w-[280px] max-w-[320px]">
+              <div className="bg-white rounded-xl shadow-lg border border-slate-200 overflow-hidden">
+                {/* Header with status badge */}
+                <div className="px-4 pt-4 pb-3 border-b border-slate-100">
+                  <div className="flex items-start justify-between gap-2 mb-2">
+                    <h3 className="text-base font-semibold text-slate-900 leading-tight flex-1 line-clamp-2">
+                      {selectedListingData.title}
+                    </h3>
+                    <span className="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 whitespace-nowrap flex-shrink-0">
+                      Active
+                    </span>
+                  </div>
+                  
+                  {/* Price - prominent */}
+                  {selectedListingData.price ? (
+                    <div className="flex items-baseline gap-1">
+                      <span className="text-lg font-bold text-[#1F2937]">
+                        Rs. {selectedListingData.price.toLocaleString("en-LK")}
+                      </span>
+                      <span className="text-xs text-slate-500">/mo</span>
+                    </div>
+                  ) : (
+                    <div className="text-sm text-slate-400 italic">Price not available</div>
+                  )}
+                </div>
+
+                {/* Meta information */}
+                <div className="px-4 py-3 space-y-2">
+                  {selectedListingData.roomType && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-medium text-slate-500 uppercase tracking-wide min-w-[70px]">Type</span>
+                      <span className="text-sm text-slate-700 font-medium">{selectedListingData.roomType}</span>
+                    </div>
+                  )}
+                  
+                  {selectedListingData.location && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-medium text-slate-500 uppercase tracking-wide min-w-[70px]">Location</span>
+                      <span className="text-sm text-slate-700">{selectedListingData.location}</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* CTA Button */}
+                {selectedListingData.numericId && (
+                  <div className="px-4 pb-4 pt-2 border-t border-slate-100">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        router.push(`/boardings/${selectedListingData.numericId}`);
+                      }}
+                      className="w-full rounded-lg bg-[#1F2937] px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-all hover:bg-[#111827] hover:shadow-md active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-[#1F2937] focus:ring-offset-2"
+                    >
+                      View Details →
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           </InfoWindow>
         )}
