@@ -1,5 +1,6 @@
 import dynamicComponent from "next/dynamic";
 
+
 export const dynamic = "force-dynamic";
 
 const LoginClient = dynamicComponent(() => import("./LoginClient"), {
