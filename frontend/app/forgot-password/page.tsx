@@ -1,7 +1,16 @@
-import { redirect } from "next/navigation";
+"use client";
+
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
 
 export default function ForgotPasswordPage() {
-  // Redirect to login page since forgot-password feature is not available
-  redirect("/login");
+  const router = useRouter();
+
+  useEffect(() => {
+    // Redirect to login page since forgot-password feature is not available
+    router.push("/login");
+  }, [router]);
+
+  return null;
 }
 

@@ -1,7 +1,7 @@
 import { Router } from "express";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
-import { supabase } from "../supabase";
+import { supabase } from "../supabase.js";
 import { ENV } from "../env";
 import { sendEmailOTP } from "../services/email";
 
