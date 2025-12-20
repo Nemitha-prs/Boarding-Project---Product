@@ -28,6 +28,7 @@ export default function ReviewSection({ boardingId }: ReviewSectionProps) {
   const [submitting, setSubmitting] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [error, setError] = useState("");
+  const [submitError, setSubmitError] = useState("");
   const [success, setSuccess] = useState(false);
   
   // Review form state
@@ -39,7 +40,7 @@ export default function ReviewSection({ boardingId }: ReviewSectionProps) {
   const loggedIn = isAuthenticated();
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
-  // Get current user ID
+  // Get current user ID - refresh when logged in status changes
   useEffect(() => {
     const userId = getCurrentUserId();
     setCurrentUserId(userId);
@@ -52,9 +53,10 @@ export default function ReviewSection({ boardingId }: ReviewSectionProps) {
         const response = await fetch(getApiUrl(`/reviews/${boardingId}`));
         if (!response.ok) throw new Error("Failed to fetch reviews");
         const data = await response.json();
-        console.log("Fetched reviews:", data); // Debug log
-        console.log("Current user ID:", getCurrentUserId()); // Debug log
         setReviews(data);
+        // Refresh user ID after fetching reviews to ensure it's up to date
+        const userId = getCurrentUserId();
+        setCurrentUserId(userId);
       } catch (err: any) {
         console.error("Error fetching reviews:", err);
       } finally {
@@ -70,6 +72,7 @@ export default function ReviewSection({ boardingId }: ReviewSectionProps) {
     if (!loggedIn || rating === 0 || !comment.trim()) return;
 
     setSubmitting(true);
+    setSubmitError("");
     setError("");
     setSuccess(false);
 
@@ -101,7 +104,7 @@ export default function ReviewSection({ boardingId }: ReviewSectionProps) {
       setSuccess(true);
       setTimeout(() => setSuccess(false), 3000);
     } catch (err: any) {
-      setError(err.message || "Failed to submit review");
+      setSubmitError(err.message || "Failed to submit review");
     } finally {
       setSubmitting(false);
     }
@@ -250,7 +253,7 @@ export default function ReviewSection({ boardingId }: ReviewSectionProps) {
                   setShowForm(false);
                   setRating(0);
                   setComment("");
-                  setError("");
+                  setSubmitError("");
                 }}
                 className="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
               >
@@ -258,8 +261,8 @@ export default function ReviewSection({ boardingId }: ReviewSectionProps) {
               </button>
             </div>
 
-            {error && (
-              <p className="mt-2 text-sm text-red-600">{error}</p>
+            {submitError && (
+              <p className="mt-2 text-sm text-red-600">{submitError}</p>
             )}
             {success && (
               <p className="mt-2 text-sm text-green-600">Review submitted successfully!</p>
@@ -317,13 +320,13 @@ export default function ReviewSection({ boardingId }: ReviewSectionProps) {
       ) : (
         <div className="space-y-4">
           {reviews.map((review) => {
-            const isOwner = currentUserId && review.user_id && review.user_id === currentUserId;
-            console.log("Review check:", { 
-              reviewId: review.id, 
-              reviewUserId: review.user_id, 
-              currentUserId, 
-              isOwner 
-            }); // Debug log
+            // Compare user IDs - ensure both exist and match exactly
+            const isOwner = Boolean(
+              currentUserId && 
+              review.user_id && 
+              String(currentUserId).trim() === String(review.user_id).trim()
+            );
+            
             return (
               <div
                 key={review.id}
@@ -334,11 +337,11 @@ export default function ReviewSection({ boardingId }: ReviewSectionProps) {
                   <button
                     onClick={() => handleDelete(review.id)}
                     disabled={deleting === review.id}
-                    className="absolute top-3 right-3 z-10 p-2 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent border border-slate-200 bg-white shadow-sm"
+                    className="absolute top-2 right-2 z-20 p-2.5 text-red-500 hover:text-red-700 hover:bg-red-100 rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-red-50 border-2 border-red-300 bg-white shadow-md hover:shadow-lg"
                     title="Delete review"
                     aria-label="Delete review"
                   >
-                    <Trash2 size={18} />
+                    <Trash2 size={20} strokeWidth={2} />
                   </button>
                 )}
                 

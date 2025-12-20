@@ -123,7 +123,7 @@ router.post("/", jwtMiddleware, async (req, res) => {
     if (error) {
       console.error("Error creating review:", error);
       if (error.code === "23505") {
-        // Unique constraint violation
+        // Unique constraint violation - already checked above, but handle if race condition occurs
         return res.status(409).json({ error: "You have already reviewed this boarding" });
       }
       return res.status(500).json({ error: "Failed to create review" });
