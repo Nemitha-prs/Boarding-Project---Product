@@ -314,9 +314,22 @@ export default function ReviewSection({ boardingId }: ReviewSectionProps) {
             return (
               <div
                 key={review.id}
-                className="rounded-xl border border-gray-100 bg-slate-50/50 p-4"
+                className="relative rounded-xl border border-gray-100 bg-slate-50/50 p-4"
               >
-                <div className="flex items-start justify-between mb-2">
+                {/* Delete button - only visible to review owner, positioned at top-right corner */}
+                {isOwner && (
+                  <button
+                    onClick={() => handleDelete(review.id)}
+                    disabled={deleting === review.id}
+                    className="absolute top-3 right-3 p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+                    title="Delete review"
+                    aria-label="Delete review"
+                  >
+                    <Trash2 size={18} />
+                  </button>
+                )}
+                
+                <div className="flex items-start justify-between mb-2 pr-8">
                   <div className="flex-1">
                     <div className="flex items-center gap-2">
                       <p className="font-medium text-slate-900">{review.reviewer_name}</p>
@@ -341,17 +354,6 @@ export default function ReviewSection({ boardingId }: ReviewSectionProps) {
                         </span>
                       ))}
                     </div>
-                    {isOwner && (
-                      <button
-                        onClick={() => handleDelete(review.id)}
-                        disabled={deleting === review.id}
-                        className="ml-2 p-1.5 text-slate-400 hover:text-red-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                        title="Delete review"
-                        aria-label="Delete review"
-                      >
-                        <Trash2 size={16} />
-                      </button>
-                    )}
                   </div>
                 </div>
                 <p className="text-sm text-slate-700 whitespace-pre-wrap">{review.comment}</p>
