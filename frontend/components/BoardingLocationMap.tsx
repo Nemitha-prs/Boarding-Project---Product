@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useJsApiLoader, GoogleMap, Marker } from "@react-google-maps/api";
+import { useMemo, useState, useEffect, useRef } from "react";
 
 interface BoardingLocationMapProps {
   lat: number | null;
@@ -8,106 +9,112 @@ interface BoardingLocationMapProps {
   onSelect: (lat: number, lng: number) => void;
 }
 
+// Default center: Colombo, Sri Lanka
+const DEFAULT_CENTER = { lat: 6.9271, lng: 79.8612 };
+const DEFAULT_ZOOM = 13;
+
 export default function BoardingLocationMap({ lat, lng, onSelect }: BoardingLocationMapProps) {
-  const mapRef = useRef<HTMLDivElement>(null);
-  const [mapInstance, setMapInstance] = useState<any>(null);
-  const [marker, setMarker] = useState<any>(null);
+  const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "";
+  const [markerPosition, setMarkerPosition] = useState<{ lat: number; lng: number } | null>(null);
   const onSelectRef = useRef(onSelect);
-  const initialLatRef = useRef(lat);
-  const initialLngRef = useRef(lng);
+  const mapRef = useRef<google.maps.Map | null>(null);
 
   // Keep onSelect ref updated
   useEffect(() => {
     onSelectRef.current = onSelect;
   }, [onSelect]);
 
-  // Keep initial lat/lng refs updated (only on first render)
+  const { isLoaded, loadError } = useJsApiLoader({
+    googleMapsApiKey: apiKey || "dummy-key",
+  });
+
+  // Initialize marker position from props
   useEffect(() => {
-    if (initialLatRef.current === null && lat !== null) {
-      initialLatRef.current = lat;
-    }
-    if (initialLngRef.current === null && lng !== null) {
-      initialLngRef.current = lng;
+    if (lat !== null && lng !== null) {
+      setMarkerPosition({ lat, lng });
+    } else {
+      setMarkerPosition(DEFAULT_CENTER);
     }
   }, [lat, lng]);
 
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-
-    // Load Leaflet dynamically
-    const loadLeaflet = async () => {
-      const L = (await import("leaflet")).default;
-      
-      // Fix for default marker icons
-      delete (L.Icon.Default.prototype as any)._getIconUrl;
-      L.Icon.Default.mergeOptions({
-        iconRetinaUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png",
-        iconUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png",
-        shadowUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png",
-      });
-
-      if (!mapRef.current) return;
-
-      // Initialize map with initial values
-      const defaultLat = initialLatRef.current ?? 6.9271;
-      const defaultLng = initialLngRef.current ?? 79.8612;
-
-      const map = L.map(mapRef.current).setView([defaultLat, defaultLng], 13);
-
-      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-      }).addTo(map);
-
-      // Add marker
-      const newMarker = L.marker([defaultLat, defaultLng], { draggable: true }).addTo(map);
-
-      // Handle marker drag
-      newMarker.on("dragend", () => {
-        const position = newMarker.getLatLng();
-        onSelectRef.current(position.lat, position.lng);
-      });
-
-      // Handle map click
-      map.on("click", (e: any) => {
-        newMarker.setLatLng(e.latlng);
-        onSelectRef.current(e.latlng.lat, e.latlng.lng);
-      });
-
-      setMapInstance(map);
-      setMarker(newMarker);
-    };
-
-    loadLeaflet();
-
-    return () => {
-      if (mapInstance) {
-        mapInstance.remove();
-      }
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // Update marker position when lat/lng props change
-  useEffect(() => {
-    if (marker && lat !== null && lng !== null) {
-      marker.setLatLng([lat, lng]);
-      if (mapInstance) {
-        mapInstance.setView([lat, lng], 13);
-      }
+  // Calculate map center
+  const mapCenter = useMemo(() => {
+    if (lat !== null && lng !== null) {
+      return { lat, lng };
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    return DEFAULT_CENTER;
   }, [lat, lng]);
+
+  // Handle map click
+  const handleMapClick = (e: google.maps.MapMouseEvent) => {
+    if (e.latLng) {
+      const newPosition = {
+        lat: e.latLng.lat(),
+        lng: e.latLng.lng(),
+      };
+      setMarkerPosition(newPosition);
+      onSelectRef.current(newPosition.lat, newPosition.lng);
+    }
+  };
+
+  // Handle marker drag end
+  const handleMarkerDragEnd = (e: google.maps.MapMouseEvent) => {
+    if (e.latLng) {
+      const newPosition = {
+        lat: e.latLng.lat(),
+        lng: e.latLng.lng(),
+      };
+      setMarkerPosition(newPosition);
+      onSelectRef.current(newPosition.lat, newPosition.lng);
+    }
+  };
+
+  // Store map instance reference
+  const onMapLoad = (map: google.maps.Map) => {
+    mapRef.current = map;
+  };
+
+  if (loadError) {
+    return (
+      <div className="flex h-[400px] w-full items-center justify-center rounded-lg border border-red-200 bg-red-50 text-sm text-red-600">
+        Error loading Google Maps. Please check your API key.
+      </div>
+    );
+  }
+
+  if (!isLoaded) {
+    return (
+      <div className="flex h-[400px] w-full items-center justify-center rounded-lg border border-gray-200 bg-slate-50 text-sm text-slate-500">
+        Loading map...
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-2">
-      <link
-        rel="stylesheet"
-        href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/leaflet.css"
-      />
-      <div
-        ref={mapRef}
-        className="h-[400px] w-full rounded-lg border border-gray-200"
-      />
+      <div className="h-[400px] w-full rounded-lg border border-gray-200 overflow-hidden">
+        <GoogleMap
+          mapContainerStyle={{ width: "100%", height: "100%" }}
+          center={mapCenter}
+          zoom={DEFAULT_ZOOM}
+          options={{
+            streetViewControl: false,
+            mapTypeControl: false,
+            fullscreenControl: true,
+            clickableIcons: false,
+          }}
+          onClick={handleMapClick}
+          onLoad={onMapLoad}
+        >
+          {markerPosition && (
+            <Marker
+              position={markerPosition}
+              draggable={true}
+              onDragEnd={handleMarkerDragEnd}
+            />
+          )}
+        </GoogleMap>
+      </div>
       <p className="text-xs text-slate-500 text-center">
         Click on the map or drag the marker to set location
       </p>
