@@ -118,7 +118,7 @@ export default function LoginClient() {
               <div className="mt-4 text-center">
                 <Link
                   href="/forgot-password"
-                  className="text-sm text-slate-600 hover:text-slate-900 hover:underline transition-colors inline-block py-2"
+                  className="text-sm font-medium text-slate-700 hover:text-slate-900 hover:underline transition-colors inline-block py-2 px-2"
                   aria-label="Reset your password"
                 >
                   Forgot password?
