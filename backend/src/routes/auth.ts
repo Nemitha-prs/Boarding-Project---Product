@@ -452,4 +452,186 @@ router.post("/login", async (req, res) => {
   }
 });
 
+// POST /auth/forgot-password/send-otp - Send OTP for password reset
+router.post("/forgot-password/send-otp", async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email || typeof email !== "string") {
+      return res.status(400).json({ error: "email is required" });
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({ error: "Invalid email format" });
+    }
+
+    // Check if user exists
+    const { data: existingUser } = await supabase
+      .from("users")
+      .select("id, name, email")
+      .eq("email", email)
+      .eq("role", "owner")
+      .maybeSingle();
+
+    if (!existingUser) {
+      // Don't reveal if email exists for security
+      return res.json({ message: "If the email exists, an OTP has been sent" });
+    }
+
+    const cooldownCheck = await canSendOTP(email, "forgot_password");
+    if (!cooldownCheck.allowed) {
+      return res.status(429).json({
+        error: "Please wait before requesting another code",
+        cooldownSeconds: cooldownCheck.remainingSeconds,
+      });
+    }
+
+    const otp = generateOTP();
+    const expiresAt = new Date(Date.now() + OTP_PASSWORD_RESET_EXPIRY_MS);
+
+    try {
+      await upsertOTP(email, otp, "forgot_password", expiresAt);
+    } catch (dbError: any) {
+      console.error("Failed to store OTP:", dbError);
+      return res.status(500).json({
+        error: "Failed to generate verification code. Please try again.",
+      });
+    }
+
+    try {
+      await sendEmailOTP(email, otp, (existingUser as any).name || "User", true);
+    } catch (emailError: any) {
+      console.error("Failed to send email OTP:", emailError);
+      return res.status(500).json({ error: "Failed to send OTP email" });
+    }
+
+    return res.json({ message: "If the email exists, an OTP has been sent" });
+  } catch (e: any) {
+    console.error("Send forgot password OTP error:", e);
+    return res
+      .status(500)
+      .json({ error: "Failed to send verification code. Please try again." });
+  }
+});
+
+// POST /auth/forgot-password/verify-otp - Verify OTP for password reset
+router.post("/forgot-password/verify-otp", async (req, res) => {
+  try {
+    const { email, otp } = req.body;
+    if (!email || typeof email !== "string") {
+      return res.status(400).json({ error: "email is required" });
+    }
+    if (!otp || typeof otp !== "string") {
+      return res.status(400).json({ error: "otp is required" });
+    }
+
+    const entry: any = await getOTP(email, "forgot_password");
+
+    if (!entry) {
+      return res
+        .status(400)
+        .json({ error: "No OTP found. Please request a new code." });
+    }
+
+    if (entry.verified) {
+      return res.status(400).json({ error: "OTP already verified" });
+    }
+
+    const expiresAt = new Date(entry.expires_at).getTime();
+    if (Date.now() > expiresAt) {
+      await deleteOTP(email, "forgot_password");
+      return res.status(400).json({ error: "Verification code expired" });
+    }
+
+    if (entry.attempts >= MAX_OTP_ATTEMPTS) {
+      await deleteOTP(email, "forgot_password");
+      return res
+        .status(400)
+        .json({ error: "Too many attempts. Please request a new code." });
+    }
+
+    if (otp.trim() !== String(entry.otp).trim()) {
+      await incrementOTPAttempts(email, "forgot_password");
+      return res.status(400).json({ error: "Incorrect verification code" });
+    }
+
+    await markOTPVerified(email, "forgot_password");
+
+    return res.json({ verified: true, message: "OTP verified successfully" });
+  } catch (e: any) {
+    console.error("Verify forgot password OTP error:", e);
+    return res
+      .status(500)
+      .json({ error: "Failed to verify code. Please try again." });
+  }
+});
+
+// POST /auth/forgot-password/reset - Reset password after OTP verification
+router.post("/forgot-password/reset", async (req, res) => {
+  try {
+    const { email, otp, newPassword } = req.body;
+    if (!email || typeof email !== "string") {
+      return res.status(400).json({ error: "email is required" });
+    }
+    if (!otp || typeof otp !== "string") {
+      return res.status(400).json({ error: "otp is required" });
+    }
+    if (!newPassword || typeof newPassword !== "string") {
+      return res.status(400).json({ error: "newPassword is required" });
+    }
+    if (newPassword.length < 6) {
+      return res.status(400).json({ error: "Password must be at least 6 characters" });
+    }
+
+    // Verify OTP first
+    const entry: any = await getOTP(email, "forgot_password");
+    if (!entry || !entry.verified) {
+      return res.status(400).json({
+        error: "OTP not verified. Please verify your OTP first.",
+      });
+    }
+
+    // Double-check OTP matches
+    if (otp.trim() !== String(entry.otp).trim()) {
+      return res.status(400).json({ error: "Invalid OTP" });
+    }
+
+    // Check if user exists
+    const { data: user, error: userError } = await supabase
+      .from("users")
+      .select("id")
+      .eq("email", email)
+      .eq("role", "owner")
+      .maybeSingle();
+
+    if (userError || !user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    // Hash new password
+    const passwordHash = await bcrypt.hash(newPassword, SALT_ROUNDS);
+
+    // Update password
+    const { error: updateError } = await supabase
+      .from("users")
+      .update({ passwordHash })
+      .eq("id", (user as any).id);
+
+    if (updateError) {
+      console.error("Failed to update password:", updateError);
+      return res.status(500).json({ error: "Failed to reset password" });
+    }
+
+    // Delete OTP after successful reset
+    await deleteOTP(email, "forgot_password");
+
+    return res.json({ message: "Password reset successfully" });
+  } catch (e: any) {
+    console.error("Reset password error:", e);
+    return res
+      .status(500)
+      .json({ error: "Failed to reset password. Please try again." });
+  }
+});
+
 export default router;

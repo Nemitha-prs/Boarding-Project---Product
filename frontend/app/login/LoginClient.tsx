@@ -115,8 +115,17 @@ export default function LoginClient() {
                 {success && <p className="text-green-600">Success</p>}
               </form>
 
+              <div className="mt-4 text-center">
+                <Link
+                  href="/forgot-password"
+                  className="text-sm text-slate-600 hover:text-slate-900 hover:underline transition-colors"
+                >
+                  Forgot password?
+                </Link>
+              </div>
+
               <p className="mt-4 text-center text-sm">
-                Don’t have an account?{" "}
+                Don't have an account?{" "}
                 <Link href="/signup" className="underline">
                   Sign up
                 </Link>

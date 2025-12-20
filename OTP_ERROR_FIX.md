@@ -1,4 +1,7 @@
-# OTP Generation Error Fix
+Get-ChildItem -Recurse -File | Where-Object { 
+    $_.Name -match '\.(backup|bak|old|orig|copy|swp|swo)$|_backup\.|_old\.|~$' -and 
+    $_.FullName -notmatch 'node_modules|\.git'
+} | Remove-Item -Force# OTP Generation Error Fix
 
 ## Error: "Failed to generate verification code. Please try again."
 
