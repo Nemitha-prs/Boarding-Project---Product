@@ -334,7 +334,8 @@ export default function BoardingDetailsPage({ params }: BoardingDetailsPageProps
       lng: dbListing.lng,
       roomType: listing.roomType,
       numericId: listing.id
-    }]} 
+    }]}
+    showInfoWindow={false}
   />
 ) : (
   <p className="py-8 text-slate-400">Location not available</p>

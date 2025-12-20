@@ -11,9 +11,14 @@ import { stringIdToNumeric } from "@/utils/idConverter";
 interface DbListing {
   id: string;
   title: string;
+  description: string;
+  price: number;
+  negotiable: boolean;
   lat: number | null;
   lng: number | null;
   boardingType?: string;
+  district: string;
+  colomboArea: string | null;
   status: "Active" | "Not-active";
 }
 
@@ -25,9 +30,15 @@ export default function BoardingsMapPage() {
     lng: number | null;
     roomType?: string;
     numericId?: number;
+    price?: string;
+    location?: string;
+    rating?: number;
+    reviewCount?: number;
+    description?: string;
   }>>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [ratings, setRatings] = useState<Map<string, { rating: number; count: number }>>(new Map());
 
   useEffect(() => {
     async function fetchListingsForMap() {
@@ -42,15 +53,51 @@ export default function BoardingsMapPage() {
         }
         
         const data: DbListing[] = await response.json();
+        
+        // Fetch ratings for all listings
+        const listingIds = data.map(l => l.id);
+        const ratingsMap = new Map<string, { rating: number; count: number }>();
+        
+        try {
+          const reviewPromises = listingIds.map(async (listingId) => {
+            try {
+              const reviewsResponse = await fetch(getApiUrl(`/reviews/${listingId}`));
+              if (reviewsResponse.ok) {
+                const reviews = await reviewsResponse.json();
+                if (Array.isArray(reviews) && reviews.length > 0) {
+                  const avgRating = reviews.reduce((sum: number, r: any) => sum + r.rating, 0) / reviews.length;
+                  ratingsMap.set(listingId, { rating: avgRating, count: reviews.length });
+                }
+              }
+            } catch (err) {
+              // Silent fail
+            }
+          });
+          await Promise.all(reviewPromises);
+        } catch (err) {
+          // Silent fail - ratings just won't show
+        }
+        
+        setRatings(ratingsMap);
+        
         // Transform data for MapView with numeric IDs for routing
-        const mapListings = data.map((listing) => ({
-          id: listing.id,
-          title: listing.title,
-          lat: listing.lat,
-          lng: listing.lng,
-          roomType: listing.boardingType,
-          numericId: stringIdToNumeric(listing.id),
-        }));
+        const mapListings = data.map((listing) => {
+          const location = listing.colomboArea || listing.district;
+          const ratingData = ratingsMap.get(listing.id);
+          return {
+            id: listing.id,
+            title: listing.title,
+            lat: listing.lat,
+            lng: listing.lng,
+            roomType: listing.boardingType,
+            numericId: stringIdToNumeric(listing.id),
+            price: `Rs. ${listing.price.toLocaleString("en-LK")}${listing.negotiable ? " (negotiable)" : ""}`,
+            location: location,
+            rating: ratingData?.rating,
+            reviewCount: ratingData?.count,
+            description: listing.description,
+          };
+        });
         setListings(mapListings);
       } catch (err: any) {
         console.error("Error fetching listings for map:", err);
