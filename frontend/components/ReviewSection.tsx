@@ -53,9 +53,11 @@ export default function ReviewSection({ boardingId }: ReviewSectionProps) {
         const response = await fetch(getApiUrl(`/reviews/${boardingId}`));
         if (!response.ok) throw new Error("Failed to fetch reviews");
         const data = await response.json();
+        console.log("Fetched reviews data:", data);
         setReviews(data);
         // Refresh user ID after fetching reviews to ensure it's up to date
         const userId = getCurrentUserId();
+        console.log("Current user ID from token:", userId);
         setCurrentUserId(userId);
       } catch (err: any) {
         console.error("Error fetching reviews:", err);
@@ -327,23 +329,56 @@ export default function ReviewSection({ boardingId }: ReviewSectionProps) {
               String(currentUserId).trim() === String(review.user_id).trim()
             );
             
+            // Debug logging
+            if (loggedIn) {
+              console.log("Review Debug:", {
+                reviewId: review.id,
+                reviewUserId: review.user_id,
+                reviewUserIdType: typeof review.user_id,
+                currentUserId: currentUserId,
+                currentUserIdType: typeof currentUserId,
+                isOwner: isOwner,
+                loggedIn: loggedIn
+              });
+            }
+            
             return (
               <div
                 key={review.id}
                 className="relative rounded-xl border border-gray-100 bg-slate-50/50 p-4"
               >
                 {/* Delete button - only visible to review owner, positioned at top-right corner */}
-                {isOwner && (
+                {isOwner ? (
                   <button
                     onClick={() => handleDelete(review.id)}
                     disabled={deleting === review.id}
-                    className="absolute top-2 right-2 z-20 p-2.5 text-red-500 hover:text-red-700 hover:bg-red-100 rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-red-50 border-2 border-red-300 bg-white shadow-md hover:shadow-lg"
+                    className="!absolute !top-2 !right-2 !z-[9999] !p-2.5 !text-red-600 hover:!text-red-700 hover:!bg-red-100 !rounded-lg !transition-all disabled:!opacity-50 disabled:!cursor-not-allowed disabled:hover:!bg-red-50 !border-2 !border-red-500 !bg-white !shadow-lg hover:!shadow-xl"
                     title="Delete review"
                     aria-label="Delete review"
+                    style={{ 
+                      position: 'absolute !important',
+                      top: '8px !important',
+                      right: '8px !important',
+                      zIndex: '9999 !important',
+                      backgroundColor: '#ffffff !important',
+                      border: '2px solid #ef4444 !important',
+                      color: '#dc2626 !important',
+                      cursor: 'pointer',
+                      display: 'block',
+                      visibility: 'visible',
+                      opacity: '1'
+                    }}
                   >
-                    <Trash2 size={20} strokeWidth={2} />
+                    <Trash2 size={20} strokeWidth={2.5} />
                   </button>
-                )}
+                ) : loggedIn ? (
+                  <div 
+                    className="absolute top-2 right-2 z-40 text-[10px] text-gray-500 bg-gray-100 px-2 py-1 rounded border border-gray-300"
+                    title={`Debug: Your ID: ${currentUserId || 'none'}, Review User ID: ${review.user_id || 'none'}, Match: ${String(currentUserId) === String(review.user_id)}`}
+                  >
+                    Not yours
+                  </div>
+                ) : null}
                 
                 <div className="flex items-start justify-between mb-2 pr-8">
                   <div className="flex-1">
