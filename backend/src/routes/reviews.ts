@@ -41,6 +41,7 @@ router.get("/:boardingId", async (req, res) => {
       rating: review.rating,
       comment: review.comment,
       created_at: review.created_at,
+      user_id: review.user_id,
       reviewer_name: review.users?.name || "Anonymous",
       reviewer_email: review.users?.email || null,
     }));
@@ -134,6 +135,7 @@ router.post("/", jwtMiddleware, async (req, res) => {
       rating: review.rating,
       comment: review.comment,
       created_at: review.created_at,
+      user_id: review.user_id,
       reviewer_name: (review.users as any)?.name || "Anonymous",
       reviewer_email: (review.users as any)?.email || null,
     };
@@ -142,6 +144,60 @@ router.post("/", jwtMiddleware, async (req, res) => {
   } catch (e: any) {
     console.error("Create review error:", e);
     return res.status(500).json({ error: "Failed to create review" });
+  }
+});
+
+// DELETE /reviews/:reviewId - Delete a review (requires authentication, only owner can delete)
+router.delete("/:reviewId", jwtMiddleware, async (req, res) => {
+  try {
+    const { reviewId } = req.params;
+    const userId = req.user?.id;
+
+    if (!userId) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    if (!reviewId) {
+      return res.status(400).json({ error: "reviewId is required" });
+    }
+
+    // Check if review exists and belongs to the user
+    const { data: review, error: fetchError } = await supabase
+      .from("reviews")
+      .select("id, user_id")
+      .eq("id", reviewId)
+      .maybeSingle();
+
+    if (fetchError) {
+      console.error("Error fetching review:", fetchError);
+      return res.status(500).json({ error: "Failed to fetch review" });
+    }
+
+    if (!review) {
+      return res.status(404).json({ error: "Review not found" });
+    }
+
+    // Check if the user owns this review
+    if (review.user_id !== userId) {
+      return res.status(403).json({ error: "You can only delete your own reviews" });
+    }
+
+    // Delete the review
+    const { error: deleteError } = await supabase
+      .from("reviews")
+      .delete()
+      .eq("id", reviewId)
+      .eq("user_id", userId);
+
+    if (deleteError) {
+      console.error("Error deleting review:", deleteError);
+      return res.status(500).json({ error: "Failed to delete review" });
+    }
+
+    return res.status(200).json({ message: "Review deleted successfully" });
+  } catch (e: any) {
+    console.error("Delete review error:", e);
+    return res.status(500).json({ error: "Failed to delete review" });
   }
 });
 

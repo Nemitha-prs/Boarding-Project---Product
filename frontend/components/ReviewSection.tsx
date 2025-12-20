@@ -2,14 +2,17 @@
 
 import { useState, useEffect } from "react";
 import { getApiUrl, getToken, isAuthenticated } from "@/lib/auth";
+import { getCurrentUserId } from "@/lib/jwt";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { Trash2 } from "lucide-react";
 
 interface Review {
   id: string;
   rating: number;
   comment: string;
   created_at: string;
+  user_id: string;
   reviewer_name: string;
   reviewer_email: string | null;
 }
@@ -23,6 +26,7 @@ export default function ReviewSection({ boardingId }: ReviewSectionProps) {
   const [reviews, setReviews] = useState<Review[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [deleting, setDeleting] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
   
@@ -99,6 +103,41 @@ export default function ReviewSection({ boardingId }: ReviewSectionProps) {
     ? reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length
     : 0;
 
+  // Delete review
+  const handleDelete = async (reviewId: string) => {
+    if (!window.confirm("Are you sure you want to delete this review? This action cannot be undone.")) {
+      return;
+    }
+
+    setDeleting(reviewId);
+    setError("");
+
+    try {
+      const token = getToken();
+      const response = await fetch(getApiUrl(`/reviews/${reviewId}`), {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.error || "Failed to delete review");
+      }
+
+      // Remove the review from the list
+      setReviews(reviews.filter((r) => r.id !== reviewId));
+      setSuccess(true);
+      setTimeout(() => setSuccess(false), 3000);
+    } catch (err: any) {
+      setError(err.message || "Failed to delete review");
+    } finally {
+      setDeleting(null);
+    }
+  };
+
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString("en-US", {
       year: "numeric",
@@ -106,6 +145,8 @@ export default function ReviewSection({ boardingId }: ReviewSectionProps) {
       day: "numeric",
     });
   };
+
+  const currentUserId = getCurrentUserId();
 
   return (
     <section className="mt-8 rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
@@ -240,6 +281,18 @@ export default function ReviewSection({ boardingId }: ReviewSectionProps) {
         </div>
       )}
 
+      {/* Error/Success Messages */}
+      {error && (
+        <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3">
+          <p className="text-center text-sm font-medium text-red-700">{error}</p>
+        </div>
+      )}
+      {success && (
+        <div className="mb-4 rounded-lg border border-green-200 bg-green-50 p-3">
+          <p className="text-center text-sm font-medium text-green-700">Review deleted successfully!</p>
+        </div>
+      )}
+
       {/* Reviews List */}
       {loading ? (
         <div className="space-y-4">
@@ -256,32 +309,55 @@ export default function ReviewSection({ boardingId }: ReviewSectionProps) {
         </p>
       ) : (
         <div className="space-y-4">
-          {reviews.map((review) => (
-            <div
-              key={review.id}
-              className="rounded-xl border border-gray-100 bg-slate-50/50 p-4"
-            >
-              <div className="flex items-start justify-between mb-2">
-                <div>
-                  <p className="font-medium text-slate-900">{review.reviewer_name}</p>
-                  <p className="text-xs text-slate-500">{formatDate(review.created_at)}</p>
+          {reviews.map((review) => {
+            const isOwner = currentUserId && review.user_id === currentUserId;
+            return (
+              <div
+                key={review.id}
+                className="rounded-xl border border-gray-100 bg-slate-50/50 p-4"
+              >
+                <div className="flex items-start justify-between mb-2">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <p className="font-medium text-slate-900">{review.reviewer_name}</p>
+                      {isOwner && (
+                        <span className="text-xs text-slate-500 bg-slate-200 px-2 py-0.5 rounded-full">
+                          You
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-slate-500">{formatDate(review.created_at)}</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="flex">
+                      {[1, 2, 3, 4, 5].map((star) => (
+                        <span
+                          key={star}
+                          className={`text-sm ${
+                            star <= review.rating ? "text-yellow-400" : "text-gray-300"
+                          }`}
+                        >
+                          ★
+                        </span>
+                      ))}
+                    </div>
+                    {isOwner && (
+                      <button
+                        onClick={() => handleDelete(review.id)}
+                        disabled={deleting === review.id}
+                        className="ml-2 p-1.5 text-slate-400 hover:text-red-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        title="Delete review"
+                        aria-label="Delete review"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    )}
+                  </div>
                 </div>
-                <div className="flex">
-                  {[1, 2, 3, 4, 5].map((star) => (
-                    <span
-                      key={star}
-                      className={`text-sm ${
-                        star <= review.rating ? "text-yellow-400" : "text-gray-300"
-                      }`}
-                    >
-                      ★
-                    </span>
-                  ))}
-                </div>
+                <p className="text-sm text-slate-700 whitespace-pre-wrap">{review.comment}</p>
               </div>
-              <p className="text-sm text-slate-700 whitespace-pre-wrap">{review.comment}</p>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </section>
