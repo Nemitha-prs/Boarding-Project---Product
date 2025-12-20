@@ -329,21 +329,6 @@ export default function ForgotPasswordPage() {
                       <p className="text-center text-sm font-medium text-red-700">{error}</p>
                     </div>
                   )}
-
-                  <div className="text-center">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setStep("email");
-                        setError("");
-                        setSuccess("");
-                        setOtp(["", "", "", "", "", ""]);
-                      }}
-                      className="text-sm text-slate-600 hover:text-slate-900 hover:underline transition-colors"
-                    >
-                      Change email
-                    </button>
-                  </div>
                 </div>
               )}
 
