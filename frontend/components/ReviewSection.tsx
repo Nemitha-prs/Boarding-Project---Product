@@ -40,10 +40,22 @@ export default function ReviewSection({ boardingId }: ReviewSectionProps) {
   const loggedIn = isAuthenticated();
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
-  // Get current user ID - refresh when logged in status changes
+  // Get current user ID - refresh when logged in status changes or on mount
   useEffect(() => {
-    const userId = getCurrentUserId();
-    setCurrentUserId(userId);
+    const updateUserId = () => {
+      const userId = getCurrentUserId();
+      setCurrentUserId(userId);
+    };
+    
+    updateUserId();
+    
+    // Listen for storage changes (in case token is updated in another tab)
+    const handleStorageChange = () => {
+      updateUserId();
+    };
+    
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
   }, [loggedIn]);
 
   // Fetch reviews
@@ -53,12 +65,12 @@ export default function ReviewSection({ boardingId }: ReviewSectionProps) {
         const response = await fetch(getApiUrl(`/reviews/${boardingId}`));
         if (!response.ok) throw new Error("Failed to fetch reviews");
         const data = await response.json();
-        console.log("Fetched reviews data:", data);
         setReviews(data);
         // Refresh user ID after fetching reviews to ensure it's up to date
         const userId = getCurrentUserId();
-        console.log("Current user ID from token:", userId);
-        setCurrentUserId(userId);
+        if (userId) {
+          setCurrentUserId(userId);
+        }
       } catch (err: any) {
         console.error("Error fetching reviews:", err);
       } finally {
@@ -322,25 +334,18 @@ export default function ReviewSection({ boardingId }: ReviewSectionProps) {
       ) : (
         <div className="space-y-4">
           {reviews.map((review) => {
-            // Compare user IDs - ensure both exist and match exactly
-            const isOwner = Boolean(
-              currentUserId && 
-              review.user_id && 
-              String(currentUserId).trim() === String(review.user_id).trim()
-            );
+            // Compare user IDs - normalize both to strings and compare exactly
+            const normalizeId = (id: string | null | undefined): string => {
+              if (!id) return '';
+              // Convert to string, trim whitespace, but keep case (UUIDs are case-sensitive)
+              return String(id).trim();
+            };
             
-            // Debug logging
-            if (loggedIn) {
-              console.log("Review Debug:", {
-                reviewId: review.id,
-                reviewUserId: review.user_id,
-                reviewUserIdType: typeof review.user_id,
-                currentUserId: currentUserId,
-                currentUserIdType: typeof currentUserId,
-                isOwner: isOwner,
-                loggedIn: loggedIn
-              });
-            }
+            const normalizedCurrentId = normalizeId(currentUserId);
+            const normalizedReviewId = normalizeId(review.user_id);
+            const isOwner = normalizedCurrentId !== '' && 
+                           normalizedReviewId !== '' && 
+                           normalizedCurrentId === normalizedReviewId;
             
             return (
               <div
@@ -348,37 +353,17 @@ export default function ReviewSection({ boardingId }: ReviewSectionProps) {
                 className="relative rounded-xl border border-gray-100 bg-slate-50/50 p-4"
               >
                 {/* Delete button - only visible to review owner, positioned at top-right corner */}
-                {isOwner ? (
+                {isOwner && (
                   <button
                     onClick={() => handleDelete(review.id)}
                     disabled={deleting === review.id}
-                    className="!absolute !top-2 !right-2 !z-[9999] !p-2.5 !text-red-600 hover:!text-red-700 hover:!bg-red-100 !rounded-lg !transition-all disabled:!opacity-50 disabled:!cursor-not-allowed disabled:hover:!bg-red-50 !border-2 !border-red-500 !bg-white !shadow-lg hover:!shadow-xl"
+                    className="absolute top-2 right-2 z-50 p-2.5 text-red-600 hover:text-red-700 hover:bg-red-100 rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-red-50 border-2 border-red-500 bg-white shadow-lg hover:shadow-xl"
                     title="Delete review"
                     aria-label="Delete review"
-                    style={{ 
-                      position: 'absolute !important',
-                      top: '8px !important',
-                      right: '8px !important',
-                      zIndex: '9999 !important',
-                      backgroundColor: '#ffffff !important',
-                      border: '2px solid #ef4444 !important',
-                      color: '#dc2626 !important',
-                      cursor: 'pointer',
-                      display: 'block',
-                      visibility: 'visible',
-                      opacity: '1'
-                    }}
                   >
                     <Trash2 size={20} strokeWidth={2.5} />
                   </button>
-                ) : loggedIn ? (
-                  <div 
-                    className="absolute top-2 right-2 z-40 text-[10px] text-gray-500 bg-gray-100 px-2 py-1 rounded border border-gray-300"
-                    title={`Debug: Your ID: ${currentUserId || 'none'}, Review User ID: ${review.user_id || 'none'}, Match: ${String(currentUserId) === String(review.user_id)}`}
-                  >
-                    Not yours
-                  </div>
-                ) : null}
+                )}
                 
                 <div className="flex items-start justify-between mb-2 pr-8">
                   <div className="flex-1">
