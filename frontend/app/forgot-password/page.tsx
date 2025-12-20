@@ -33,11 +33,11 @@ export default function ForgotPasswordPage() {
   const [otpCountdown, setOtpCountdown] = useState(0);
   const [otpVerified, setOtpVerified] = useState(false);
 
-  // OTP Timer
+  // OTP Timer - Single timer for resend cooldown
   useEffect(() => {
     if (otpCountdown > 0) {
       const timer = setTimeout(() => {
-        setOtpCountdown((prev) => prev - 1);
+        setOtpCountdown((prev) => Math.max(0, prev - 1));
       }, 1000);
       return () => clearTimeout(timer);
     }
@@ -76,10 +76,11 @@ export default function ForgotPasswordPage() {
         throw new Error(data.error || "Failed to send OTP");
       }
 
-      setSuccess("OTP sent to your email");
+      setSuccess("Verification code sent! Check your email.");
       setStep("otp");
-      setOtpCountdown(120); // 2 minutes cooldown
+      setOtpCountdown(120); // 2 minutes cooldown for resend
       setOtp(["", "", "", "", "", ""]);
+      setError(""); // Clear any previous errors
     } catch (err: any) {
       setError(err.message || "Failed to send OTP. Please try again.");
     } finally {
@@ -182,10 +183,12 @@ export default function ForgotPasswordPage() {
 
   // Resend OTP
   const handleResendOtp = async () => {
+    if (otpCountdown > 0) return; // Prevent resend during cooldown
+    
     setResendingOtp(true);
-    setOtpCountdown(0);
     setOtp(["", "", "", "", "", ""]);
     setError("");
+    setSuccess("");
     
     try {
       const res = await fetch(getApiUrl("/auth/forgot-password/send-otp"), {
@@ -201,16 +204,17 @@ export default function ForgotPasswordPage() {
           setOtpCountdown(cooldownSeconds);
           setError(data.error || "Please wait before requesting another code");
         } else {
-          setError(data.error || "Failed to resend OTP");
+          setError(data.error || "Failed to resend code. Please try again.");
         }
         return;
       }
 
-      setSuccess("OTP resent to your email");
+      setSuccess("Verification code resent! Check your email.");
       setOtpCountdown(120);
       setOtp(["", "", "", "", "", ""]);
+      setError("");
     } catch (err: any) {
-      setError(err.message || "Failed to resend OTP");
+      setError(err.message || "Failed to resend code. Please try again.");
     } finally {
       setResendingOtp(false);
     }
@@ -232,7 +236,7 @@ export default function ForgotPasswordPage() {
                 </h2>
                 <p className="text-sm text-slate-500">
                   {step === "email" && "Enter your email to receive a verification code"}
-                  {step === "otp" && `Enter the 6-digit code sent to ${email}`}
+                  {step === "otp" && `We sent a 6-digit code to ${email}`}
                   {step === "reset" && "Enter your new password"}
                 </p>
               </div>
@@ -304,6 +308,12 @@ export default function ForgotPasswordPage() {
                     />
                   </div>
 
+                  {success && (
+                    <div className="rounded-lg border border-green-200 bg-green-50 p-3">
+                      <p className="text-center text-sm font-medium text-green-700">{success}</p>
+                    </div>
+                  )}
+
                   <OtpInput
                     otp={otp}
                     setOtp={setOtp}
@@ -317,12 +327,6 @@ export default function ForgotPasswordPage() {
                   {error && (
                     <div className="rounded-lg border border-red-200 bg-red-50 p-3">
                       <p className="text-center text-sm font-medium text-red-700">{error}</p>
-                    </div>
-                  )}
-
-                  {success && (
-                    <div className="rounded-lg border border-green-200 bg-green-50 p-3">
-                      <p className="text-center text-sm font-medium text-green-700">{success}</p>
                     </div>
                   )}
 

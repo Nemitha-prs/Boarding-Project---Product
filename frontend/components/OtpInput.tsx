@@ -103,25 +103,29 @@ export default function OtpInput({
             />
           ))}
         </div>
-        <p className="mt-2 text-xs text-center text-slate-500">
-          Check your email for the 6-digit code
+        <p className="mt-3 text-xs text-center text-slate-500">
+          Enter the code we sent to your email
         </p>
       </div>
 
-      <div className="flex items-center justify-between">
+      <div className="text-center">
         <button
           type="button"
           onClick={onResend}
           disabled={resending || countdown > 0}
-          className="text-sm font-semibold text-brand-accent hover:underline disabled:text-slate-400 disabled:no-underline disabled:cursor-not-allowed transition-colors"
+          className="text-sm font-medium text-slate-600 hover:text-slate-900 hover:underline disabled:text-slate-400 disabled:no-underline disabled:cursor-not-allowed transition-colors"
         >
-          {resending ? "Sending..." : countdown > 0 ? `Resend in ${formatTime(countdown)}` : "Resend code"}
+          {resending ? (
+            "Sending code..."
+          ) : countdown > 0 ? (
+            <span className="inline-flex items-center gap-1.5">
+              <span>Resend code in</span>
+              <span className="font-mono font-semibold text-slate-700">{formatTime(countdown)}</span>
+            </span>
+          ) : (
+            "Resend verification code"
+          )}
         </button>
-        {countdown > 0 && (
-          <span className="text-sm text-slate-500 font-mono">
-            {formatTime(countdown)}
-          </span>
-        )}
       </div>
 
       <button
