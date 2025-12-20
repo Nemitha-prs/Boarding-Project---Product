@@ -19,13 +19,14 @@ interface MapViewProps {
     description?: string;
   }>;
   showInfoWindow?: boolean; // Default true, set to false to disable popups
+  containerClassName?: string; // Optional custom container class
 }
 
 // Default center: Sri Lanka
 const DEFAULT_CENTER = { lat: 7.8731, lng: 80.7718 };
 const DEFAULT_ZOOM = 7;
 
-export default function MapView({ listings, showInfoWindow = true }: MapViewProps) {
+export default function MapView({ listings, showInfoWindow = true, containerClassName }: MapViewProps) {
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "";
   const [selectedListing, setSelectedListing] = useState<string | null>(null);
   const router = useRouter();
@@ -108,8 +109,11 @@ export default function MapView({ listings, showInfoWindow = true }: MapViewProp
     );
   }
 
+  const defaultContainerClass = "relative w-full overflow-hidden rounded-2xl border border-slate-200 shadow-inner";
+  const containerClass = containerClassName || defaultContainerClass;
+
   return (
-    <div className="relative w-full overflow-hidden rounded-2xl border border-slate-200 shadow-inner" style={{ aspectRatio: "1 / 1" }}>
+    <div className={containerClass} style={{ aspectRatio: "1 / 1" }}>
       <GoogleMap
         mapContainerStyle={{ width: "100%", height: "100%" }}
         center={mapCenter}

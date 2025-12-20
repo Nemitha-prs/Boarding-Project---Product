@@ -56,21 +56,20 @@ function convertDbListingToBoarding(db: DbListing): BoardingListing {
   // Convert string ID to number using the shared utility function
   const numericId = stringIdToNumeric(db.id);
   
-  return {
-    id: numericId,
-    title: db.title,
-    description: db.description,
-    price: `Rs. ${db.price.toLocaleString("en-LK")}`,
-    image: coverImage,
-    location: location,
-    district: db.district,
-    areaCode: db.colomboArea,
-    roomType: db.boardingType,
-    distance: "—",
-    rating: 0,
-    facilities: db.facilities,
-    availableBeds: db.beds || undefined,
-  };
+    return {
+      id: numericId,
+      title: db.title,
+      description: db.description,
+      price: `Rs. ${db.price.toLocaleString("en-LK")}`,
+      image: coverImage,
+      location: location,
+      district: db.district,
+      areaCode: db.colomboArea,
+      roomType: db.boardingType,
+      rating: 0,
+      facilities: db.facilities,
+      availableBeds: db.beds || undefined,
+    };
 }
 
 export default function BoardingDetailsPage({ params }: BoardingDetailsPageProps) {
@@ -232,7 +231,7 @@ export default function BoardingDetailsPage({ params }: BoardingDetailsPageProps
                   </h2>
                   <div className="mt-2 flex flex-wrap items-center gap-3">
                     <p className="text-sm text-slate-600">
-                      {listing.roomType} · {listing.distance} to campus
+                      {listing.roomType}
                     </p>
                     {rating > 0 && (
                       <div className="flex items-center gap-2">
@@ -255,8 +254,23 @@ export default function BoardingDetailsPage({ params }: BoardingDetailsPageProps
                 <Gallery images={galleryImages} title={listing.title} />
 
                 <section className="rounded-2xl border border-gray-100 bg-slate-50/80 p-5">
-                  <h3 className="text-base font-semibold text-slate-900">Facilities</h3>
+                  <h3 className="text-base font-semibold text-slate-900">Details</h3>
                   <ul className="mt-4 grid gap-2 sm:grid-cols-2">
+                    {/* Room Type */}
+                    <li className="flex items-center gap-2 rounded-full bg-white px-3 py-2 text-sm text-slate-600 shadow-sm">
+                      <span className="h-2 w-2 rounded-full bg-brand-accent" />
+                      Room Type: {listing.roomType}
+                    </li>
+                    
+                    {/* Number of Bathrooms */}
+                    {dbListing && (
+                      <li className="flex items-center gap-2 rounded-full bg-white px-3 py-2 text-sm text-slate-600 shadow-sm">
+                        <span className="h-2 w-2 rounded-full bg-brand-accent" />
+                        Bathrooms: {dbListing.bathrooms}
+                      </li>
+                    )}
+                    
+                    {/* Facilities */}
                     {listing.facilities.map((facility) => (
                       <li
                         key={facility}
@@ -324,7 +338,7 @@ export default function BoardingDetailsPage({ params }: BoardingDetailsPageProps
                   )}
                 </section>
 
-                <section className="rounded-2xl border border-dashed border-brand-accent/30 bg-white p-4 text-center text-sm text-slate-500">
+                <section className="rounded-2xl border border-dashed border-brand-accent/30 bg-white p-4">
                 {dbListing?.lat && dbListing?.lng ? (
   <MapView 
     listings={[{
@@ -336,9 +350,10 @@ export default function BoardingDetailsPage({ params }: BoardingDetailsPageProps
       numericId: listing.id
     }]}
     showInfoWindow={false}
+    containerClassName="relative w-full overflow-hidden rounded-xl"
   />
 ) : (
-  <p className="py-8 text-slate-400">Location not available</p>
+  <p className="py-8 text-center text-slate-400">Location not available</p>
 )}
                 </section>
               </div>
