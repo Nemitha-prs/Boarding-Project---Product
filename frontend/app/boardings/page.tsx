@@ -764,7 +764,6 @@ export default function BoardingsPage() {
 
   const sortedListings = useMemo(() => {
     if (!bookmarkIds.length) return filteredListings;
-    const bookmarkSet = new Set(bookmarkIds);
     const copy = [...filteredListings];
     copy.sort((a, b) => {
       const aB = bookmarkSet.has(a.id) ? 1 : 0;
@@ -773,7 +772,7 @@ export default function BoardingsPage() {
       return 0;
     });
     return copy;
-  }, [filteredListings, bookmarkIds]);
+  }, [filteredListings, bookmarkSet, bookmarkIds.length]);
 
   return (
     <>

@@ -29,8 +29,10 @@ export default function ReviewSection({ boardingId }: ReviewSectionProps) {
   const [deleting, setDeleting] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [submitError, setSubmitError] = useState("");
-  const [success, setSuccess] = useState(false);
-  
+  const [deleteSuccess, setDeleteSuccess] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [reviewToDelete, setReviewToDelete] = useState<string | null>(null);
+
   // Review form state
   const [rating, setRating] = useState(0);
   const [hoverRating, setHoverRating] = useState(0);
@@ -65,9 +67,11 @@ export default function ReviewSection({ boardingId }: ReviewSectionProps) {
         const response = await fetch(getApiUrl(`/reviews/${boardingId}`));
         if (!response.ok) throw new Error("Failed to fetch reviews");
         const data = await response.json();
+        console.log("Fetched reviews with user_ids:", data.map((r: any) => ({ id: r.id, user_id: r.user_id, reviewer: r.reviewer_name })));
         setReviews(data);
         // Refresh user ID after fetching reviews to ensure it's up to date
         const userId = getCurrentUserId();
+        console.log("Current logged in user ID:", userId);
         if (userId) {
           setCurrentUserId(userId);
         }
@@ -88,7 +92,6 @@ export default function ReviewSection({ boardingId }: ReviewSectionProps) {
     setSubmitting(true);
     setSubmitError("");
     setError("");
-    setSuccess(false);
 
     try {
       const token = getToken();
@@ -111,12 +114,12 @@ export default function ReviewSection({ boardingId }: ReviewSectionProps) {
       }
 
       const newReview = await response.json();
+      console.log("New review created with user_id:", newReview.user_id);
       setReviews([newReview, ...reviews]);
       setRating(0);
       setComment("");
       setShowForm(false);
-      setSuccess(true);
-      setTimeout(() => setSuccess(false), 3000);
+      // No success message when review is added
     } catch (err: any) {
       setSubmitError(err.message || "Failed to submit review");
     } finally {
@@ -129,18 +132,29 @@ export default function ReviewSection({ boardingId }: ReviewSectionProps) {
     ? reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length
     : 0;
 
-  // Delete review
-  const handleDelete = async (reviewId: string) => {
-    if (!window.confirm("Are you sure you want to delete this review? This action cannot be undone.")) {
-      return;
-    }
+  // Show delete confirmation modal
+  const handleDeleteClick = (reviewId: string) => {
+    setReviewToDelete(reviewId);
+    setShowDeleteConfirm(true);
+  };
 
-    setDeleting(reviewId);
+  // Cancel delete
+  const handleCancelDelete = () => {
+    setShowDeleteConfirm(false);
+    setReviewToDelete(null);
+  };
+
+  // Confirm and delete review
+  const handleDelete = async () => {
+    if (!reviewToDelete) return;
+
+    setDeleting(reviewToDelete);
     setError("");
+    setShowDeleteConfirm(false);
 
     try {
       const token = getToken();
-      const response = await fetch(getApiUrl(`/reviews/${reviewId}`), {
+      const response = await fetch(getApiUrl(`/reviews/${reviewToDelete}`), {
         method: "DELETE",
         headers: {
           "Content-Type": "application/json",
@@ -154,9 +168,10 @@ export default function ReviewSection({ boardingId }: ReviewSectionProps) {
       }
 
       // Remove the review from the list
-      setReviews(reviews.filter((r) => r.id !== reviewId));
-      setSuccess(true);
-      setTimeout(() => setSuccess(false), 3000);
+      setReviews(reviews.filter((r) => r.id !== reviewToDelete));
+      setDeleteSuccess(true);
+      setTimeout(() => setDeleteSuccess(false), 3000);
+      setReviewToDelete(null);
     } catch (err: any) {
       setError(err.message || "Failed to delete review");
     } finally {
@@ -278,9 +293,6 @@ export default function ReviewSection({ boardingId }: ReviewSectionProps) {
             {submitError && (
               <p className="mt-2 text-sm text-red-600">{submitError}</p>
             )}
-            {success && (
-              <p className="mt-2 text-sm text-green-600">Review submitted successfully!</p>
-            )}
           </form>
         )
       ) : (
@@ -311,9 +323,38 @@ export default function ReviewSection({ boardingId }: ReviewSectionProps) {
           <p className="text-center text-sm font-medium text-red-700">{error}</p>
         </div>
       )}
-      {success && (
-        <div className="mb-4 rounded-lg border border-green-200 bg-green-50 p-3">
-          <p className="text-center text-sm font-medium text-green-700">Review deleted successfully!</p>
+      {deleteSuccess && (
+        <div className="mb-4 rounded-lg border border-red-300 bg-red-100 p-3">
+          <p className="text-center text-sm font-medium text-red-800">Review deleted successfully!</p>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={handleCancelDelete}>
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <div className="mb-4">
+              <h3 className="text-lg font-semibold text-slate-900">Delete Review</h3>
+              <p className="mt-2 text-sm text-slate-600">
+                Are you sure you want to delete this review? This action cannot be undone.
+              </p>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={handleCancelDelete}
+                className="flex-1 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDelete}
+                disabled={deleting !== null}
+                className="flex-1 rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {deleting ? "Deleting..." : "Delete"}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -355,13 +396,13 @@ export default function ReviewSection({ boardingId }: ReviewSectionProps) {
                 {/* Delete button - only visible to review owner, positioned at top-right corner */}
                 {isOwner && (
                   <button
-                    onClick={() => handleDelete(review.id)}
-                    disabled={deleting === review.id}
-                    className="absolute top-2 right-2 z-50 p-2.5 text-red-600 hover:text-red-700 hover:bg-red-100 rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-red-50 border-2 border-red-500 bg-white shadow-lg hover:shadow-xl"
+                    onClick={() => handleDeleteClick(review.id)}
+                    disabled={deleting === review.id || showDeleteConfirm}
+                    className="absolute top-2 right-2 z-10 p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-slate-400"
                     title="Delete review"
                     aria-label="Delete review"
                   >
-                    <Trash2 size={20} strokeWidth={2.5} />
+                    <Trash2 size={14} strokeWidth={2} />
                   </button>
                 )}
                 

@@ -127,22 +127,27 @@ export default function BoardingDetailsPage({ params }: BoardingDetailsPageProps
         
         setDbListing(listingWithOwner);
         setListing(convertedListing);
+        setLoading(false); // Set loading to false immediately after setting listing
         
-        // Fetch reviews for rating
-        try {
-          const reviewsResponse = await fetch(getApiUrl(`/reviews/${listingWithOwner.id}`));
-          if (reviewsResponse.ok) {
-            const reviews = await reviewsResponse.json();
+        // Fetch reviews for rating (non-blocking, happens after listing is shown)
+        fetch(getApiUrl(`/reviews/${listingWithOwner.id}`))
+          .then((reviewsResponse) => {
+            if (reviewsResponse.ok) {
+              return reviewsResponse.json();
+            }
+            return null;
+          })
+          .then((reviews) => {
             if (Array.isArray(reviews) && reviews.length > 0) {
               const avgRating = reviews.reduce((sum: number, r: any) => sum + r.rating, 0) / reviews.length;
               setRating(avgRating);
               setReviewCount(reviews.length);
             }
-          }
-        } catch (err) {
-          // Silent fail - rating just won't show
-          console.error("Error fetching reviews:", err);
-        }
+          })
+          .catch((err) => {
+            // Silent fail - rating just won't show
+            console.error("Error fetching reviews:", err);
+          });
       } catch (err: any) {
         console.error("Error fetching listing:", err);
         setError(err.message || "Failed to load listing");
