@@ -7,6 +7,7 @@ import Footer from "@/components/Footer";
 import MapView from "@/components/MapView";
 import Gallery from "@/components/Gallery";
 import BookmarkButton from "@/components/BookmarkButton";
+import ReviewSection from "@/components/ReviewSection";
 import { incrementView } from "@/utils/views";
 import { incrementPendingApprovals } from "@/utils/pendingApprovals";
 import { useEffect, useState, useRef } from "react";
@@ -306,6 +307,11 @@ export default function BoardingDetailsPage({ params }: BoardingDetailsPageProps
               </div>
             </div>
           </article>
+
+          {/* Reviews Section */}
+          {dbListing?.id && (
+            <ReviewSection boardingId={dbListing.id} />
+          )}
 
           <div className="mt-6 text-center">
             <Link
