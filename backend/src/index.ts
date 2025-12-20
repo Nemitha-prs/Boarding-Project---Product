@@ -5,6 +5,7 @@ import { ENV } from "./env";
 import authRoutes from "./routes/auth";
 import listingsRoutes from "./routes/listings";
 import bookmarksRoutes from "./routes/bookmarks";
+import reviewsRoutes from "./routes/reviews";
 import dbTestRoute from "./routes/dbTest";
 
 const app = express();
@@ -21,6 +22,7 @@ app.get("/health", (_req, res) => res.json({ ok: true }));
 app.use("/auth", authRoutes);
 app.use("/listings", listingsRoutes);
 app.use("/bookmarks", bookmarksRoutes);
+app.use("/reviews", reviewsRoutes);
 app.use("/api/db-test", dbTestRoute);
 
 // Not found handler
