@@ -259,7 +259,7 @@ export default function BoardingDetailsPage({ params }: BoardingDetailsPageProps
                     {/* Room Type */}
                     <li className="flex items-center gap-2 rounded-full bg-white px-3 py-2 text-sm text-slate-600 shadow-sm">
                       <span className="h-2 w-2 rounded-full bg-brand-accent" />
-                      Room Type: {listing.roomType}
+                      {listing.roomType}
                     </li>
                     
                     {/* Number of Bathrooms */}
@@ -350,7 +350,6 @@ export default function BoardingDetailsPage({ params }: BoardingDetailsPageProps
       numericId: listing.id
     }]}
     showInfoWindow={false}
-    containerClassName="relative w-full overflow-hidden rounded-xl"
   />
 ) : (
   <p className="py-8 text-center text-slate-400">Location not available</p>
