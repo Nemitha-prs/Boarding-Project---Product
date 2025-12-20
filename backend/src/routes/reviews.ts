@@ -36,15 +36,19 @@ router.get("/:boardingId", async (req, res) => {
     }
 
     // Transform the data to match frontend expectations
-    const transformedReviews = (reviews || []).map((review: any) => ({
-      id: review.id,
-      rating: review.rating,
-      comment: review.comment,
-      created_at: review.created_at,
-      user_id: review.user_id,
-      reviewer_name: review.users?.name || "Anonymous",
-      reviewer_email: review.users?.email || null,
-    }));
+    const transformedReviews = (reviews || []).map((review: any) => {
+      const transformed = {
+        id: review.id,
+        rating: review.rating,
+        comment: review.comment,
+        created_at: review.created_at,
+        user_id: review.user_id || null, // Ensure user_id is included, even if null
+        reviewer_name: review.users?.name || "Anonymous",
+        reviewer_email: review.users?.email || null,
+      };
+      console.log("Transformed review:", { id: transformed.id, user_id: transformed.user_id });
+      return transformed;
+    });
 
     return res.json(transformedReviews);
   } catch (e: any) {
@@ -99,6 +103,7 @@ router.post("/", jwtMiddleware, async (req, res) => {
     }
 
     // Create the review
+    console.log("Creating review with user_id:", userId, "for boarding:", boarding_id);
     const { data: review, error } = await supabase
       .from("reviews")
       .insert({
@@ -128,6 +133,12 @@ router.post("/", jwtMiddleware, async (req, res) => {
       }
       return res.status(500).json({ error: "Failed to create review" });
     }
+
+    console.log("Review created successfully:", {
+      id: review.id,
+      user_id: review.user_id,
+      boarding_id: boarding_id
+    });
 
     // Transform the response
     const transformedReview = {
