@@ -8,6 +8,7 @@ import MapView from "@/components/MapView";
 import Gallery from "@/components/Gallery";
 import BookmarkButton from "@/components/BookmarkButton";
 import ReviewSection from "@/components/ReviewSection";
+import StarRating from "@/components/StarRating";
 import { incrementView } from "@/utils/views";
 import { incrementPendingApprovals } from "@/utils/pendingApprovals";
 import { useEffect, useState, useRef } from "react";
@@ -77,6 +78,8 @@ export default function BoardingDetailsPage({ params }: BoardingDetailsPageProps
   const [dbListing, setDbListing] = useState<DbListing | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [rating, setRating] = useState<number>(0);
+  const [reviewCount, setReviewCount] = useState<number>(0);
   const lastViewedId = useRef<string | null>(null);
 
   useEffect(() => {
@@ -124,6 +127,22 @@ export default function BoardingDetailsPage({ params }: BoardingDetailsPageProps
         
         setDbListing(listingWithOwner);
         setListing(convertedListing);
+        
+        // Fetch reviews for rating
+        try {
+          const reviewsResponse = await fetch(getApiUrl(`/reviews/${listingWithOwner.id}`));
+          if (reviewsResponse.ok) {
+            const reviews = await reviewsResponse.json();
+            if (Array.isArray(reviews) && reviews.length > 0) {
+              const avgRating = reviews.reduce((sum: number, r: any) => sum + r.rating, 0) / reviews.length;
+              setRating(avgRating);
+              setReviewCount(reviews.length);
+            }
+          }
+        } catch (err) {
+          // Silent fail - rating just won't show
+          console.error("Error fetching reviews:", err);
+        }
       } catch (err: any) {
         console.error("Error fetching listing:", err);
         setError(err.message || "Failed to load listing");
@@ -206,9 +225,21 @@ export default function BoardingDetailsPage({ params }: BoardingDetailsPageProps
                   <h2 className="mt-2 text-2xl font-semibold text-[#1F2937] sm:text-3xl">
                     {listing.title}
                   </h2>
-                  <p className="mt-1 text-sm text-slate-600">
-                    {listing.roomType} · {listing.distance} to campus
-                  </p>
+                  <div className="mt-2 flex flex-wrap items-center gap-3">
+                    <p className="text-sm text-slate-600">
+                      {listing.roomType} · {listing.distance} to campus
+                    </p>
+                    {rating > 0 && (
+                      <div className="flex items-center gap-2">
+                        <StarRating rating={rating} size="sm" showNumber />
+                        {reviewCount > 0 && (
+                          <span className="text-xs text-slate-500">
+                            ({reviewCount} {reviewCount === 1 ? "review" : "reviews"})
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </div>
                 {dbListing && <BookmarkButton listingId={dbListing.id} />}
               </div>
