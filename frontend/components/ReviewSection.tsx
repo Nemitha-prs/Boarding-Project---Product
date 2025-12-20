@@ -37,6 +37,13 @@ export default function ReviewSection({ boardingId }: ReviewSectionProps) {
   const [showForm, setShowForm] = useState(false);
 
   const loggedIn = isAuthenticated();
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+
+  // Get current user ID
+  useEffect(() => {
+    const userId = getCurrentUserId();
+    setCurrentUserId(userId);
+  }, [loggedIn]);
 
   // Fetch reviews
   useEffect(() => {
@@ -45,6 +52,8 @@ export default function ReviewSection({ boardingId }: ReviewSectionProps) {
         const response = await fetch(getApiUrl(`/reviews/${boardingId}`));
         if (!response.ok) throw new Error("Failed to fetch reviews");
         const data = await response.json();
+        console.log("Fetched reviews:", data); // Debug log
+        console.log("Current user ID:", getCurrentUserId()); // Debug log
         setReviews(data);
       } catch (err: any) {
         console.error("Error fetching reviews:", err);
@@ -145,8 +154,6 @@ export default function ReviewSection({ boardingId }: ReviewSectionProps) {
       day: "numeric",
     });
   };
-
-  const currentUserId = getCurrentUserId();
 
   return (
     <section className="mt-8 rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
@@ -310,7 +317,13 @@ export default function ReviewSection({ boardingId }: ReviewSectionProps) {
       ) : (
         <div className="space-y-4">
           {reviews.map((review) => {
-            const isOwner = currentUserId && review.user_id === currentUserId;
+            const isOwner = currentUserId && review.user_id && review.user_id === currentUserId;
+            console.log("Review check:", { 
+              reviewId: review.id, 
+              reviewUserId: review.user_id, 
+              currentUserId, 
+              isOwner 
+            }); // Debug log
             return (
               <div
                 key={review.id}
@@ -321,7 +334,7 @@ export default function ReviewSection({ boardingId }: ReviewSectionProps) {
                   <button
                     onClick={() => handleDelete(review.id)}
                     disabled={deleting === review.id}
-                    className="absolute top-3 right-3 p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+                    className="absolute top-3 right-3 z-10 p-2 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent border border-slate-200 bg-white shadow-sm"
                     title="Delete review"
                     aria-label="Delete review"
                   >
